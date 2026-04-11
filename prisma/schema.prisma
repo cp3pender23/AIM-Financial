@@ -1,0 +1,41 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model BsaReport {
+  id                     Int      @id @default(autoincrement())
+  recordNo               Int
+  formType               String
+  bsaId                  String
+  filingDate             DateTime?
+  entryDate              DateTime?
+  transactionDate        DateTime?
+  subjectName            String?
+  subjectState           String?
+  subjectDob             String?
+  subjectEinSsn          String?
+  amountTotal            Float?
+  suspiciousActivityType String?
+  totalCashIn            Float?
+  totalCashOut           Float?
+  transactionType        String?
+  attachment             Boolean?
+  regulator              String?
+  institutionType        String?
+  latestFiling           Boolean?
+  foreignCashIn          Float?
+  foreignCashOut         Float?
+  institutionState       String?
+  isAmendment            Boolean?
+  receiptDate            DateTime?
+  riskLevel              String
+  zip3                   String
+
+  @@index([riskLevel])
+  @@index([zip3])
+}

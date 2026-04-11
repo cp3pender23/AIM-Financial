@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Repository Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="app-shell">
+    <div class="background-orb orb-one"></div>
+    <div class="background-orb orb-two"></div>
+
+    <div class="dashboard-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Enterprise Risk Intelligence</p>
+          <h1 class="headline">Financial Entity Command Center</h1>
+          <p class="subhead">
+            Entity-centric ranking of suspicious transactions with rapid drilldowns.
+          </p>
+        </div>
+        <div class="topbar-meta">
+          <div class="meta-card">
+            <span class="meta-icon"><i class="bi bi-calendar-check"></i></span>
+            <span class="meta-label">Data Window</span>
+            <span class="meta-value">Last 90 Days</span>
+          </div>
+          <div class="meta-card status-live">
+            <span class="meta-icon"><i class="bi bi-broadcast-pin"></i></span>
+            <span class="meta-label">Refresh</span>
+            <span class="meta-value">Live Monitoring</span>
+          </div>
+        </div>
+      </header>
+
+      <section class="summary-grid">
+        <div class="summary-card">
+          <div class="summary-icon">
+            <i class="bi bi-people-fill"></i>
+          </div>
+          <p class="summary-label">Total Entities</p>
+          <p id="total-subjects" class="summary-value">—</p>
+          <p class="summary-footnote">Distinct entity profiles evaluated</p>
+        </div>
+        <div class="summary-card">
+          <div class="summary-icon">
+            <i class="bi bi-receipt"></i>
+          </div>
+          <p class="summary-label">Total Transactions</p>
+          <p id="total-transactions" class="summary-value">—</p>
+          <p class="summary-footnote">All observed activity in scope</p>
+        </div>
+        <div class="summary-card">
+          <div class="summary-icon">
+            <i class="bi bi-cash-stack"></i>
+          </div>
+          <p class="summary-label">Total Amount</p>
+          <p id="total-amount" class="summary-value">—</p>
+          <p class="summary-footnote">Aggregated value under review</p>
+        </div>
+        <div class="summary-card">
+          <div class="summary-icon">
+            <i class="bi bi-bar-chart-line"></i>
+          </div>
+          <p class="summary-label">Avg Transaction</p>
+          <p id="avg-amount" class="summary-value">—</p>
+          <p class="summary-footnote">Mean amount across all events</p>
+        </div>
+      </section>
+
+      <section class="main-grid">
+        <aside class="left-rail">
+          <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">
+              <i class="bi bi-pie-chart-fill"></i>
+              Amount by Risk Level
+            </span>
+            <div class="panel-meta panel-meta--stack">
+              <span class="panel-subtitle">Share of subjects by risk level</span>
+              <button id="clear-risk-filter" class="btn btn-outline-secondary btn-sm is-hidden">Clear</button>
+            </div>
+          </div>
+            <div class="panel-body">
+              <canvas id="riskChart" height="200"></canvas>
+            </div>
+          </div>
+
+          <div class="panel filters-panel">
+            <div class="panel-header">
+              <span class="panel-title">
+                <i class="bi bi-funnel-fill"></i>
+                Filters
+              </span>
+              <span class="panel-subtitle">Drill into the signal</span>
+            </div>
+            <div class="panel-body">
+              <label class="form-label small fw-semibold text-uppercase">Entity</label>
+              <select id="subject-filter" class="form-select form-select-sm mb-3">
+                <option value="all">All Entities</option>
+              </select>
+
+              <label class="form-label small fw-semibold text-uppercase">Residence Location</label>
+              <select id="residence-filter" class="form-select form-select-sm mb-3">
+                <option value="all">All States</option>
+              </select>
+
+              <label class="form-label small fw-semibold text-uppercase">Activity Location</label>
+              <select id="activity-filter" class="form-select form-select-sm mb-3">
+                <option value="all">All States</option>
+              </select>
+
+              <label class="form-label small fw-semibold text-uppercase">Transaction Type</label>
+              <select id="transaction-filter" class="form-select form-select-sm mb-3">
+                <option value="all">All Types</option>
+              </select>
+
+              <label class="form-label small fw-semibold text-uppercase">Risk Level</label>
+              <select id="risk-filter" class="form-select form-select-sm mb-3">
+                <option value="all">All</option>
+                <option value="TOP">TOP</option>
+                <option value="HIGH">HIGH</option>
+                <option value="MODERATE">MODERATE</option>
+                <option value="LOW">LOW</option>
+              </select>
+
+              <label class="form-label small fw-semibold text-uppercase">Criminal History</label>
+              <select id="criminal-filter" class="form-select form-select-sm mb-3">
+                <option value="all">All</option>
+                <option value="any">Yes (any)</option>
+                <option value="none">No</option>
+                <option value="violent">Violent</option>
+                <option value="financial">Financial</option>
+                <option value="felony">Felony</option>
+              </select>
+
+              <div class="d-flex gap-2 mb-3">
+                <button id="clear-filters" class="btn btn-outline-secondary btn-sm w-100">
+                  Clear Filters
+                </button>
+              </div>
+
+            </div>
+          </div>
+        </aside>
+
+        <div class="content-grid">
+          <div class="panel table-panel">
+            <div class="panel-header">
+              <span class="panel-title">
+                <i class="bi bi-list-stars"></i>
+                Entity Rankings
+              </span>
+              <span id="table-caption" class="panel-subtitle"></span>
+            </div>
+            <div class="table-controls">
+              <div class="table-page-size">
+                <label class="form-label">Rows</label>
+                <select id="table-page-size" class="form-select form-select-sm">
+                  <option value="10">10</option>
+                  <option value="15" selected>15</option>
+                  <option value="25">25</option>
+                  <option value="50">50</option>
+                </select>
+              </div>
+              <div class="table-link-filter">
+                <label class="form-label">Link ID</label>
+                <input
+                  id="table-link-filter"
+                  type="search"
+                  class="form-control form-control-sm"
+                  placeholder="e.g. 8F2C1A"
+                />
+              </div>
+              <div class="table-search">
+                <label class="form-label">Search</label>
+                <input
+                  id="table-search"
+                  type="search"
+                  class="form-control form-control-sm"
+                  placeholder="Search subject, amount, or transactions"
+                />
+              </div>
+              <div class="table-dates">
+                <div>
+                  <label class="form-label">Start date</label>
+                  <input id="table-start-date" type="date" class="form-control form-control-sm" />
+                </div>
+                <div>
+                  <label class="form-label">End date</label>
+                  <input id="table-end-date" type="date" class="form-control form-control-sm" />
+                </div>
+              </div>
+            </div>
+            <table class="table table-hover align-middle mb-0">
+              <thead>
+                <tr>
+                  <th class="sortable" data-sort="riskLevel">Risk</th>
+                  <th class="sortable" data-sort="linkId">Link ID</th>
+                  <th class="sortable" data-sort="subjectName">Entity</th>
+                  <th class="sortable" data-sort="transactionCount">Transactions</th>
+                  <th class="sortable" data-sort="totalAmount">Total Amount</th>
+                  <th class="sortable" data-sort="activityLocation">Activity Location</th>
+                  <th class="sortable" data-sort="firstTransactionDate">First Transaction</th>
+                  <th class="sortable" data-sort="lastTransactionDate">Last Transaction</th>
+                </tr>
+              </thead>
+              <tbody id="records-body"></tbody>
+            </table>
+            <div class="table-pagination table-pagination--bottom">
+              <label class="form-label">Page</label>
+              <div class="btn-group btn-group-sm" role="group" aria-label="Pagination">
+                <button id="table-prev-page" type="button" class="btn btn-outline-secondary">Prev</button>
+                <button id="table-next-page" type="button" class="btn btn-outline-secondary">Next</button>
+              </div>
+              <div id="table-page-buttons" class="btn-group btn-group-sm" role="group" aria-label="Page numbers"></div>
+              <span id="table-page-indicator" class="table-page-indicator"></span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
