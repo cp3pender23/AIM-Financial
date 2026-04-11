@@ -4,3 +4,6 @@ node_modules/
 *.log
 .DS_Store
 ~$*
+prisma/dev.db
+prisma/*.db
+prisma/*.db-journal
