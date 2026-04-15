@@ -163,7 +163,7 @@ No schema changes. No migrations. No Link ID persisted as a column.
 End-to-end checks:
 1. `dotnet build` clean, 0 warnings.
 2. `/api/entities` returns ~91 rows (90 linked + 1 unlinked group, depending on seed data) for the existing 500-row seed.
-3. Synthetic UNLINKED row appears last (or sorted by TransactionCount desc — verify placement).
+3. Synthetic UNLINKED row sorts naturally with the rest by `TransactionCount DESC`. If it has the most transactions (likely with real BSA data), it appears first; if few, it appears further down. No special-case placement.
 4. Row click on `HUDSON/WILLIAM/A` → modal shows 18 filings (known count for that subject).
 5. Row click on the UNLINKED row → modal shows every filing with null link ID.
 6. KPI card math: `Total Transactions` = 500, `Total Entities` ≈ 91 + 1 for the seed.
@@ -174,5 +174,5 @@ End-to-end checks:
 
 ## Migration path if we regret entity-centric
 
-- The filing grid code is preserved on the `main` branch prior to this change (commit will be tagged for rollback).
-- The `/api/records` endpoint stays intact; reverting the UI to filing-centric is a `Pages/Index.cshtml`-only change.
+- The filing-centric grid is preserved in commit `acb3821` ("feat: port AIM from vendor-scoring to BSA/FinCEN platform"). Revert `Pages/Index.cshtml` to that commit's version to restore.
+- The `/api/records` endpoint stays intact and keeps returning filing-centric data, so the only thing a revert touches is the Razor Page.
