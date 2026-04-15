@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: aim-fincen
+    name: aim
     runtime: docker
     plan: free
     region: ohio
