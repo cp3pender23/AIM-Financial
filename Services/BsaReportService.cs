@@ -29,6 +29,7 @@ public class BsaReportService(AimDbContext db, IAuditLogger audit, IFinCenClient
         return best;
     }
 
+    // Returns the most common non-empty value; ties broken alphabetically (deterministic, display-only).
     private static string? Mode(IEnumerable<string?> values)
     {
         return values
@@ -348,7 +349,9 @@ public class BsaReportService(AimDbContext db, IAuditLogger audit, IFinCenClient
 
     public async Task<IReadOnlyList<EntityRowDto>> GetEntitiesAsync(IQueryCollection query, CancellationToken ct)
     {
-        var filings = await ApplyFilters(db.BsaReports.AsNoTracking(), query).ToListAsync(ct);
+        // Safety cap: at 10,000 rows we materialize in memory; beyond that we need cursor
+        // pagination. Revisit if the dashboard ever shows a noticeable clip.
+        var filings = await ApplyFilters(db.BsaReports.AsNoTracking(), query).Take(10_000).ToListAsync(ct);
 
         var groups = filings
             .GroupBy(f => LinkAnalysis.BuildLinkId(f.SubjectEinSsn, f.SubjectDob))
@@ -356,10 +359,10 @@ public class BsaReportService(AimDbContext db, IAuditLogger audit, IFinCenClient
             {
                 var isUnlinked = g.Key is null;
                 var linkId = g.Key ?? "unlinked";
-                var ordered = g.OrderByDescending(x => x.FilingDate).ToList();
+                var mostRecent = g.MaxBy(x => x.FilingDate);
                 return new EntityRowDto(
                     LinkId: linkId,
-                    SubjectName: isUnlinked ? "— Unlinked filings —" : ordered.First().SubjectName,
+                    SubjectName: isUnlinked ? "— Unlinked filings —" : mostRecent?.SubjectName,
                     TransactionCount: g.Count(),
                     TotalAmount: g.Sum(x => x.AmountTotal ?? 0m),
                     ActivityLocation: Mode(g.Select(x => x.InstitutionState)),
@@ -378,7 +381,9 @@ public class BsaReportService(AimDbContext db, IAuditLogger audit, IFinCenClient
 
     public async Task<EntitySummaryDto> GetEntitySummaryAsync(IQueryCollection query, CancellationToken ct)
     {
-        var filings = await ApplyFilters(db.BsaReports.AsNoTracking(), query).ToListAsync(ct);
+        // Safety cap: at 10,000 rows we materialize in memory; beyond that we need cursor
+        // pagination. Revisit if the dashboard ever shows a noticeable clip.
+        var filings = await ApplyFilters(db.BsaReports.AsNoTracking(), query).Take(10_000).ToListAsync(ct);
 
         var groups = filings
             .GroupBy(f => LinkAnalysis.BuildLinkId(f.SubjectEinSsn, f.SubjectDob) ?? "unlinked")
@@ -398,7 +403,7 @@ public class BsaReportService(AimDbContext db, IAuditLogger audit, IFinCenClient
         return new EntitySummaryDto(
             TotalEntities: groups.Count,
             TotalTransactions: totalTx,
-            TotalAmount: totalAmt == 0 ? null : totalAmt,
+            TotalAmount: totalTx == 0 ? null : totalAmt,
             AverageTransaction: avg,
             TopAndHighEntities: groups.Count(g => g.Risk is "TOP" or "HIGH")
         );
