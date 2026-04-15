@@ -413,24 +413,43 @@
       },
 
       async loadFilterOpts() {
-        const r = await fetch('/api/filters').then(x => x.json());
-        this.filterOpts.subjectStates = r.subjectStates || [];
-        this.filterOpts.institutionStates = r.institutionStates || [];
-        this.filterOpts.transactionTypes = r.transactionTypes || [];
+        try {
+          const r = await fetch('/api/filters');
+          if (!r.ok) throw new Error(r.status);
+          const d = await r.json();
+          this.filterOpts.subjectStates = d.subjectStates || [];
+          this.filterOpts.institutionStates = d.institutionStates || [];
+          this.filterOpts.transactionTypes = d.transactionTypes || [];
+        } catch {
+          this.toast('error', 'Session expired or API unreachable. Please refresh.');
+        }
       },
 
       async reload() {
         const qs = this.queryString();
-        const [rows, summary, risk, states] = await Promise.all([
-          fetch('/api/entities?' + qs).then(r => r.json()),
-          fetch('/api/entity-summary?' + qs).then(r => r.json()),
-          fetch('/api/risk-amounts?' + qs).then(r => r.json()),
-          fetch('/api/filings-by-state?' + qs).then(r => r.json()),
-        ]);
-        this.rows = rows;
-        this.kpi = summary;
-        if (_g) _g.setGridOption('rowData', this.rows);
-        this.renderCharts(risk, states);
+        const safe = async (url, fallback) => {
+          try {
+            const r = await fetch(url);
+            if (!r.ok) throw new Error(r.status);
+            return await r.json();
+          } catch {
+            throw new Error('fetch-failed');
+          }
+        };
+        try {
+          const [rows, summary, risk, states] = await Promise.all([
+            safe('/api/entities?' + qs),
+            safe('/api/entity-summary?' + qs),
+            safe('/api/risk-amounts?' + qs),
+            safe('/api/filings-by-state?' + qs),
+          ]);
+          this.rows = rows;
+          this.kpi = summary;
+          if (_g) _g.setGridOption('rowData', this.rows);
+          this.renderCharts(risk, states);
+        } catch {
+          this.toast('error', 'Session expired or API unreachable. Please refresh.');
+        }
       },
 
       buildGrid() {
@@ -581,7 +600,7 @@
       closeDrawer() { this.drawerOpen = false; this.selected = null; this.entityFilings = []; },
 
       copyLinkId() {
-        if (!this.selected?.linkId) return;
+        if (!this.selected?.linkId || this.selected.linkId === 'unlinked') return;
         navigator.clipboard.writeText(this.selected.linkId);
         this.toast('success', 'Copied ' + this.selected.linkId);
       },
