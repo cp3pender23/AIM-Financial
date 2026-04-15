@@ -97,4 +97,5 @@ public record EntitySummaryDto(
     int TotalTransactions,
     decimal? TotalAmount,
     decimal? AverageTransaction,
-    int TopAndHighEntities);
+    int TopAndHighEntities,
+    IReadOnlyDictionary<string, int> ByRiskLevel);

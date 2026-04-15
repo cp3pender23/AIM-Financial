@@ -143,12 +143,14 @@
       <div>
         <div class="text-[10px] uppercase tracking-widest text-slate-600 px-2 mb-2">Risk Level</div>
         <div class="flex flex-col gap-1">
-          <div class="tier-btn" :class="{'bg-slate-800': filters.riskLevel === ''}" @@click="filters.riskLevel=''; reload()">
+          <div class="tier-btn" :class="{'bg-slate-800': filters.riskLevel.length === 0}" @@click="setRisk('')">
             <span>All</span>
+            <span class="text-slate-500" x-text="baselineByRisk.__total || 0"></span>
           </div>
           <template x-for="t in ['TOP','HIGH','MODERATE','LOW']" :key="t">
-            <div class="tier-btn" :class="{'bg-slate-800': filters.riskLevel === t}" @@click="filters.riskLevel=t; reload()">
+            <div class="tier-btn" :class="{'bg-slate-800': filters.riskLevel.includes(t)}" @@click="setRisk(t)">
               <span class="rb" :class="'rb-'+t" x-text="t"></span>
+              <span class="text-slate-500" x-text="baselineByRisk[t] || 0"></span>
             </div>
           </template>
         </div>
@@ -365,9 +367,10 @@
       filterOpts: { subjectStates: [], institutionStates: [], transactionTypes: [] },
       filters: {
         search: '', subjectState: '', institutionState: '',
-        transactionType: '', riskLevel: '',
+        transactionType: '', riskLevel: [],
         window: '90', dateFrom: '', dateTo: ''
       },
+      baselineByRisk: {},
 
       drawerOpen: false,
       selected: null,              // first filing in the entity group (used for the default detail view)
@@ -400,13 +403,20 @@
 
       setView(v) { this.view = v; if (v === 'geographic') this.$nextTick(() => this.ensureMap()); },
 
-      queryString() {
+      setRisk(r) {
+        if (r === '') this.filters.riskLevel = [];
+        else if (this.filters.riskLevel.includes(r)) this.filters.riskLevel = this.filters.riskLevel.filter(x => x !== r);
+        else this.filters.riskLevel = [...this.filters.riskLevel, r];
+        this.reload();
+      },
+
+      queryString(opts = {}) {
         const p = new URLSearchParams();
         if (this.filters.search) p.set('search', this.filters.search);
         if (this.filters.subjectState) p.set('subjectState', this.filters.subjectState);
         if (this.filters.institutionState) p.set('institutionState', this.filters.institutionState);
         if (this.filters.transactionType) p.set('transactionType', this.filters.transactionType);
-        if (this.filters.riskLevel) p.set('riskLevel', this.filters.riskLevel);
+        if (!opts.omitRisk && this.filters.riskLevel.length) p.set('riskLevel', this.filters.riskLevel.join(','));
         if (this.filters.dateFrom) p.set('dateFrom', this.filters.dateFrom);
         if (this.filters.dateTo) p.set('dateTo', this.filters.dateTo);
         return p.toString();
@@ -437,14 +447,17 @@
           }
         };
         try {
-          const [rows, summary, risk, states] = await Promise.all([
+          const baselineQs = this.queryString({ omitRisk: true });
+          const [rows, summary, risk, states, baseline] = await Promise.all([
             safe('/api/entities?' + qs),
             safe('/api/entity-summary?' + qs),
             safe('/api/risk-amounts?' + qs),
             safe('/api/filings-by-state?' + qs),
+            safe('/api/entity-summary?' + baselineQs),
           ]);
           this.rows = rows;
           this.kpi = summary;
+          this.baselineByRisk = { ...(baseline.byRiskLevel || {}), __total: baseline.totalEntities };
           if (_g) _g.setGridOption('rowData', this.rows);
           this.renderCharts(risk, states);
         } catch {

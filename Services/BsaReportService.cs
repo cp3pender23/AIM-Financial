@@ -52,7 +52,12 @@ public class BsaReportService(AimDbContext db, IAuditLogger audit, IFinCenClient
         if (S("institutionType") is { Length: > 0 } it) q = q.Where(x => x.InstitutionType == it);
         if (S("institutionState") is { Length: > 0 } iS) q = q.Where(x => x.InstitutionState == iS);
         if (S("subjectState") is { Length: > 0 } ss) q = q.Where(x => x.SubjectState == ss);
-        if (S("riskLevel") is { Length: > 0 } rl) q = q.Where(x => x.RiskLevel == rl);
+        if (S("riskLevel") is { Length: > 0 } rl)
+        {
+            var levels = rl.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (levels.Length == 1) q = q.Where(x => x.RiskLevel == levels[0]);
+            else if (levels.Length > 1) q = q.Where(x => levels.Contains(x.RiskLevel));
+        }
         if (S("transactionType") is { Length: > 0 } tt) q = q.Where(x => x.TransactionType == tt);
         if (S("suspiciousActivityType") is { Length: > 0 } sa) q = q.Where(x => x.SuspiciousActivityType == sa);
         if (S("status") is { Length: > 0 } st) q = q.Where(x => x.Status == st);
@@ -400,12 +405,17 @@ public class BsaReportService(AimDbContext db, IAuditLogger audit, IFinCenClient
         var totalAmt = filings.Sum(x => x.AmountTotal ?? 0m);
         var avg = totalTx > 0 ? totalAmt / totalTx : (decimal?)null;
 
+        var byRisk = groups
+            .GroupBy(g => g.Risk)
+            .ToDictionary(x => x.Key, x => x.Count());
+
         return new EntitySummaryDto(
             TotalEntities: groups.Count,
             TotalTransactions: totalTx,
             TotalAmount: totalTx == 0 ? null : totalAmt,
             AverageTransaction: avg,
-            TopAndHighEntities: groups.Count(g => g.Risk is "TOP" or "HIGH")
+            TopAndHighEntities: groups.Count(g => g.Risk is "TOP" or "HIGH"),
+            ByRiskLevel: byRisk
         );
     }
 }
