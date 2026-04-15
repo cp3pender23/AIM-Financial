@@ -28,17 +28,19 @@ Body registers the app: `<body>` wraps everything and `<div x-data="aim()" x-ini
 
 ```js
 {
-  view: 'overview',          // active sidebar view
-  activeRisk: '',            // selected risk tier filter, '' = All
-  search: '',                // free-text search
-  rows: [],                  // grid data from /api/records
-  kpi: {                     // from /api/summary
-    total, byRisk: { TOP, HIGH, MODERATE, LOW },
-    totalAmount, amendmentCount
+  view: 'overview',
+  rows: [],                    // entity rows from /api/entities
+  kpi: {                       // from /api/entity-summary
+    totalEntities, totalTransactions, totalAmount,
+    averageTransaction, topAndHighEntities
   },
-  selected: null,            // filing opened in the detail modal
-  subjectDetails: null,      // from /api/subject-details
-  relatedSubjects: [],       // from /api/bsa-reports/subjects/{linkId}
+  filterOpts: { subjectStates, institutionStates, transactionTypes },
+  filters: {
+    search, subjectState, institutionState, transactionType,
+    riskLevel, window, dateFrom, dateTo
+  },
+  selected: null,              // entity opened in the modal
+  entityFilings: [],           // all filings belonging to that entity
   drawerOpen: false,
   tab: 'overview',
   toasts: []
@@ -114,6 +116,11 @@ _g.setGridOption('rowData', this.rows);
 ```
 
 **CSV export** — do NOT use `_g.exportDataAsCsv()`. Use the server endpoint `/api/bsa-reports/export.csv?...` so the export respects filters applied on the server side.
+
+**Grid columns** (entity-centric):
+
+| Link ID (pill + copy) | Subject | Transactions | Total Amount | Activity | First Tx | Last Tx | Risk |
+|---|---|---|---|---|---|---|---|
 
 ## Leaflet map
 

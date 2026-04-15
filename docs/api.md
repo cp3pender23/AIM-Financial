@@ -79,6 +79,28 @@ Every analytics endpoint accepts the following query parameters, applied via `Bs
 
 **GET /api/filings-by-state** → `ByStateDto[]` grouped by `institutionState`, ordered by count desc.
 
+**GET /api/entities** → `EntityRowDto[]` — one row per unique Link ID (6-char SHA-256 hash of `subject_ein_ssn + "|" + subject_dob`). Filings with null EIN/SSN AND null DOB roll into a single synthetic row with `linkId = "unlinked"`. Sorted by `transactionCount DESC`.
+
+```json
+[{
+  "linkId": "1867c3",
+  "subjectName": "HUDSON/WILLIAM/A",
+  "transactionCount": 18,
+  "totalAmount": 46756.57,
+  "activityLocation": "IA",
+  "residenceState": "NY",
+  "firstTxDate": "2025-03-12T00:00:00Z",
+  "lastTxDate": "2026-02-14T00:00:00Z",
+  "riskLevel": "TOP"
+}, ...]
+```
+
+**GET /api/entity-summary** → `EntitySummaryDto` — entity-aggregated KPIs for the filtered set.
+```json
+{ "totalEntities": 91, "totalTransactions": 500, "totalAmount": 6825085.33,
+  "averageTransaction": 13650.17, "topAndHighEntities": 27 }
+```
+
 ### Filing CRUD
 
 **GET /api/bsa-reports/{id}** → `BsaReport` or **404**.
@@ -98,7 +120,7 @@ Every analytics endpoint accepts the following query parameters, applied via `Bs
 
 **POST /api/bsa-reports/{id}/transition** — body `{ target, reason? }`. Role-gated per transition (Draft→PendingReview is Analyst; PendingReview→Approved/Rejected is Admin; Approved→Submitted is Admin and invokes the FinCEN stub).
 
-**GET /api/bsa-reports/subjects/{linkId}** — all filings sharing the 6-char `buildLinkId` hash (i.e., same subject by EIN/SSN+DOB).
+**GET /api/bsa-reports/subjects/{linkId}** — all filings sharing the 6-char Link ID hash. Pass the literal `"unlinked"` to retrieve filings with null EIN/SSN AND null DOB.
 
 ### Audit
 
