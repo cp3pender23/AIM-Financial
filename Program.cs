@@ -21,7 +21,9 @@ builder.Services.AddDbContext<AimDbContext>(o =>
     {
         npg.CommandTimeout(60);
         npg.EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(5), errorCodesToAdd: null);
-    }).UseSnakeCaseNamingConvention());
+    }).UseSnakeCaseNamingConvention()
+      .ConfigureWarnings(w => w.Ignore(
+          Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
 builder.Services.AddIdentity<AimUser, IdentityRole>(o =>
     {
