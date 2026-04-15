@@ -71,7 +71,8 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AimDbContext>();
     db.Database.Migrate();
-    await SeedRolesAndUsersAsync(scope.ServiceProvider);
+    await SeedRolesAndUsersAsync(scope.ServiceProvider, builder.Configuration);
+    await SeedBsaReportsIfEmptyAsync(scope.ServiceProvider, app.Environment);
 }
 
 if (!app.Environment.IsDevelopment())
@@ -221,7 +222,7 @@ app.MapControllers();
 
 app.Run();
 
-static async Task SeedRolesAndUsersAsync(IServiceProvider sp)
+static async Task SeedRolesAndUsersAsync(IServiceProvider sp, IConfiguration cfg)
 {
     var roleMgr = sp.GetRequiredService<RoleManager<IdentityRole>>();
     var userMgr = sp.GetRequiredService<UserManager<AimUser>>();
@@ -246,4 +247,44 @@ static async Task SeedRolesAndUsersAsync(IServiceProvider sp)
     await EnsureUser("admin@aim.local", "Seed Admin", "Admin123!Seed", AimRoles.Admin);
     await EnsureUser("analyst@aim.local", "Seed Analyst", "Analyst123!Seed", AimRoles.Analyst);
     await EnsureUser("viewer@aim.local", "Seed Viewer", "Viewer123!Seed", AimRoles.Viewer);
+
+    var colinPassword = cfg["Seed:ColinPassword"] ?? "DemoViewer123!";
+    await EnsureUser("colin@shieldlytics.com", "Colin", colinPassword, AimRoles.Viewer);
+}
+
+static async Task SeedBsaReportsIfEmptyAsync(IServiceProvider sp, IWebHostEnvironment env)
+{
+    var db = sp.GetRequiredService<AimDbContext>();
+    if (await db.BsaReports.AnyAsync()) return;
+
+    var csvPath = Path.Combine(env.ContentRootPath, "database", "seed", "bsa_mock_data_500.csv");
+    if (!File.Exists(csvPath))
+    {
+        var log = sp.GetRequiredService<ILoggerFactory>().CreateLogger("Seed");
+        log.LogWarning("Seed CSV missing at {Path}; skipping data seed.", csvPath);
+        return;
+    }
+
+    var importer = sp.GetRequiredService<CsvImporter>();
+    await using var stream = File.OpenRead(csvPath);
+    var reports = importer.Parse(stream)
+        .Where(r => r.Parsed is not null)
+        .Select(r => r.Parsed!)
+        .ToList();
+
+    if (reports.Count == 0) return;
+
+    await using var tx = await db.Database.BeginTransactionAsync();
+    db.BsaReports.AddRange(reports);
+    await db.SaveChangesAsync();
+    db.AuditLog.Add(new AuditLogEntry
+    {
+        Action = AuditAction.ImportBatch,
+        EntityType = nameof(BsaReport),
+        ActorDisplayName = "system",
+        NewValuesJson = $"{{\"seed\":\"bsa_mock_data_500.csv\",\"count\":{reports.Count}}}",
+        CreatedAt = DateTime.UtcNow,
+    });
+    await db.SaveChangesAsync();
+    await tx.CommitAsync();
 }

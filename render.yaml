@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: aim-fincen
+    runtime: docker
+    plan: free
+    region: ohio
+    branch: features/CP
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: ConnectionStrings__DefaultConnection
+        sync: false
+      - key: Seed__ColinPassword
+        sync: false

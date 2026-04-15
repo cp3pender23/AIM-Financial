@@ -30,4 +30,11 @@
     <None Remove="database/**" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="database/seed/bsa_mock_data_500.csv">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>
