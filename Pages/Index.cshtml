@@ -1,0 +1,658 @@
+@page
+@{
+    Layout = null;
+    var displayName = User.Identity?.Name ?? "Guest";
+    var isAdmin = User.IsInRole("Admin");
+    var isAnalyst = User.IsInRole("Analyst") || isAdmin;
+}
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AIM — FinCEN Suspicious Activity Monitor</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: { extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] } } }
+    }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.9/dist/cdn.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.48.0/dist/apexcharts.min.js"></script>
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.0/styles/ag-grid.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.0/styles/ag-theme-alpine.css">
+  <script src="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.0/dist/ag-grid-community.min.js"></script>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    body { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; }
+
+    .leaflet-container { background:#0d1321 !important; }
+    .leaflet-control-zoom a { background:#1e293b !important; color:#94a3b8 !important; border-color:#334155 !important; }
+    .leaflet-bar { border:none !important; box-shadow:0 2px 8px rgba(0,0,0,.5) !important; }
+    .leaflet-control-attribution { background:rgba(7,11,22,.8) !important; color:#475569 !important; font-size:10px !important; }
+    .leaflet-control-attribution a { color:#60a5fa !important; }
+
+    #sidebar { position:fixed; left:0; top:0; bottom:0; width:232px; background:#0b0f1e; border-right:1px solid #1e293b; display:flex; flex-direction:column; z-index:40; }
+    #main    { margin-left:232px; min-height:100vh; background:#070b16; }
+
+    .ag-theme-alpine-dark {
+      --ag-background-color:#111827; --ag-header-background-color:#0d1321;
+      --ag-odd-row-background-color:#0f1629; --ag-row-hover-color:rgba(59,130,246,.06);
+      --ag-selected-row-background-color:rgba(59,130,246,.12); --ag-border-color:#1e293b;
+      --ag-header-foreground-color:#475569; --ag-foreground-color:#e2e8f0;
+      --ag-font-size:13px; --ag-row-height:44px; --ag-header-height:40px;
+      --ag-cell-horizontal-padding:14px; --ag-font-family:'Inter', ui-sans-serif, system-ui, sans-serif;
+    }
+    .ag-theme-alpine-dark .ag-header-cell-text { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; }
+    .ag-theme-alpine-dark .ag-row { border-bottom:1px solid #1e293b; cursor:pointer; }
+    .ag-theme-alpine-dark .ag-root-wrapper { border:none; }
+
+    .rb { display:inline-flex; align-items:center; padding:2px 8px; border-radius:9999px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; white-space:nowrap; }
+    .rb-TOP      { background:rgba(239,68,68,.15);  color:#f87171; border:1px solid rgba(239,68,68,.3); }
+    .rb-HIGH     { background:rgba(249,115,22,.15); color:#fb923c; border:1px solid rgba(249,115,22,.3); }
+    .rb-MODERATE { background:rgba(234,179,8,.15);  color:#fbbf24; border:1px solid rgba(234,179,8,.3); }
+    .rb-LOW      { background:rgba(34,197,94,.15);  color:#4ade80; border:1px solid rgba(34,197,94,.3); }
+
+    .sb { display:inline-flex; align-items:center; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; white-space:nowrap; }
+    .sb-Draft         { background:#1e293b; color:#94a3b8; }
+    .sb-PendingReview { background:rgba(234,179,8,.15); color:#fbbf24; }
+    .sb-Approved      { background:rgba(14,165,233,.15); color:#38bdf8; }
+    .sb-Submitted     { background:rgba(99,102,241,.15); color:#a5b4fc; }
+    .sb-Acknowledged  { background:rgba(16,185,129,.15); color:#34d399; }
+    .sb-Rejected      { background:rgba(239,68,68,.15); color:#f87171; }
+
+    #drawer { position:fixed; right:0; top:0; bottom:0; width:520px; background:#0f172a; border-left:1px solid #1e293b; z-index:50; display:flex; flex-direction:column; transform:translateX(100%); transition:transform .3s cubic-bezier(.4,0,.2,1); overflow-y:auto; }
+    #drawer.open { transform:translateX(0); }
+    #backdrop { position:fixed; inset:0; background:rgba(0,0,0,.55); backdrop-filter:blur(2px); z-index:49; opacity:0; pointer-events:none; transition:opacity .3s; }
+    #backdrop.open { opacity:1; pointer-events:auto; }
+
+    .nav-item { display:flex; align-items:center; gap:9px; padding:7px 12px; border-radius:7px; cursor:pointer; transition:all .15s; color:#475569; font-size:13px; font-weight:500; }
+    .nav-item:hover { background:#1e293b; color:#cbd5e1; }
+    .nav-item.active { background:rgba(59,130,246,.12); color:#93c5fd; }
+    .tier-btn { display:flex; align-items:center; justify-content:space-between; padding:6px 12px; border-radius:6px; cursor:pointer; transition:all .15s; font-size:12px; font-weight:500; }
+    .tier-btn:hover { background:rgba(30,41,59,.4); }
+
+    ::-webkit-scrollbar { width:5px; height:5px; }
+    ::-webkit-scrollbar-thumb { background:#334155; border-radius:3px; }
+    ::-webkit-scrollbar-track { background:transparent; }
+    .tab-btn { padding:8px 12px; font-size:12px; font-weight:500; border-bottom:2px solid transparent; color:#475569; cursor:pointer; }
+    .tab-btn.active { border-bottom-color:#3b82f6; color:#60a5fa; }
+
+    .toast-wrap { position:fixed; bottom:24px; right:24px; z-index:100; display:flex; flex-direction:column; gap:8px; }
+    .toast { padding:10px 14px; border-radius:8px; font-size:12px; font-weight:500; }
+    .toast-info    { background:#0c1a2e; border:1px solid #1e3a5f; color:#93c5fd; }
+    .toast-success { background:#052e16; border:1px solid #14532d; color:#86efac; }
+    .toast-error   { background:#1c0909; border:1px solid #450a0a; color:#fca5a5; }
+  </style>
+</head>
+<body class="bg-[#070b16] text-slate-100 antialiased">
+
+<div x-data="aim()" x-init="init()">
+
+  <aside id="sidebar">
+    <div class="px-4 pt-4 pb-3 border-b border-slate-800">
+      <div class="text-xs uppercase tracking-widest text-slate-500">AIM</div>
+      <div class="text-sm font-semibold text-slate-200">FinCEN Monitor</div>
+    </div>
+
+    <nav class="p-3 flex-1 overflow-y-auto space-y-4">
+      <div>
+        <div class="text-[10px] uppercase tracking-widest text-slate-600 px-2 mb-2">Entity</div>
+        <input x-model="filters.search" @@input.debounce.300ms="reload()" type="text"
+          placeholder="Search subject name…"
+          class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs placeholder-slate-600 focus:outline-none focus:border-blue-500" />
+      </div>
+
+      <div>
+        <div class="text-[10px] uppercase tracking-widest text-slate-600 px-2 mb-2">Residence Location</div>
+        <select x-model="filters.subjectState" @@change="reload()"
+          class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500">
+          <option value="">All states</option>
+          <template x-for="s in filterOpts.subjectStates" :key="s"><option :value="s" x-text="s"></option></template>
+        </select>
+      </div>
+
+      <div>
+        <div class="text-[10px] uppercase tracking-widest text-slate-600 px-2 mb-2">Activity Location</div>
+        <select x-model="filters.institutionState" @@change="reload()"
+          class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500">
+          <option value="">All states</option>
+          <template x-for="s in filterOpts.institutionStates" :key="s"><option :value="s" x-text="s"></option></template>
+        </select>
+      </div>
+
+      <div>
+        <div class="text-[10px] uppercase tracking-widest text-slate-600 px-2 mb-2">Transaction Type</div>
+        <select x-model="filters.transactionType" @@change="reload()"
+          class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500">
+          <option value="">All types</option>
+          <template x-for="t in filterOpts.transactionTypes" :key="t"><option :value="t" x-text="t"></option></template>
+        </select>
+      </div>
+
+      <div>
+        <div class="text-[10px] uppercase tracking-widest text-slate-600 px-2 mb-2">Risk Level</div>
+        <div class="flex flex-col gap-1">
+          <div class="tier-btn" :class="{'bg-slate-800': filters.riskLevel.length === 0}" @@click="setRisk('')">
+            <span>All</span>
+            <span class="text-slate-500" x-text="baselineByRisk.__total || 0"></span>
+          </div>
+          <template x-for="t in ['TOP','HIGH','MODERATE','LOW']" :key="t">
+            <div class="tier-btn" :class="{'bg-slate-800': filters.riskLevel.includes(t)}" @@click="setRisk(t)">
+              <span class="rb" :class="'rb-'+t" x-text="t"></span>
+              <span class="text-slate-500" x-text="baselineByRisk[t] || 0"></span>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <div>
+        <div class="text-[10px] uppercase tracking-widest text-slate-600 px-2 mb-2">Window</div>
+        <select x-model="filters.window" @@change="applyWindow(); reload()"
+          class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500">
+          <option value="90">Last 90 Days</option>
+          <option value="180">Last 180 Days</option>
+          <option value="365">Last Year</option>
+          <option value="all">All Time</option>
+        </select>
+      </div>
+
+      <div>
+        <div class="text-[10px] uppercase tracking-widest text-slate-600 px-2 mb-2">Date Range</div>
+        <input x-model="filters.dateFrom" @@change="reload()" type="date"
+          class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs mb-1 focus:outline-none focus:border-blue-500" />
+        <input x-model="filters.dateTo" @@change="reload()" type="date"
+          class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500" />
+      </div>
+    </nav>
+
+    <div class="px-4 py-3 border-t border-slate-800 text-xs">
+      <div class="text-slate-400" x-text="'@displayName'"></div>
+      <div class="text-slate-600">@(isAdmin ? "Admin" : (isAnalyst ? "Analyst" : "Viewer"))</div>
+      <a href="/Identity/Account/Logout" class="text-blue-400 hover:underline text-[11px]">Sign out</a>
+    </div>
+  </aside>
+
+  <main id="main" class="p-6">
+    <div class="flex items-center justify-between mb-5">
+      <div>
+        <h1 class="text-xl font-semibold">BSA Suspicious Activity Dashboard</h1>
+        <p class="text-xs text-slate-500">Adaptive Intelligence Monitor · FinCEN analytics</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button @@click="exportCsv()" class="bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-md px-3 py-1.5 text-xs text-slate-300">Export CSV</button>
+        @if (isAnalyst)
+        {
+          <a href="/Filing" class="bg-blue-600 hover:bg-blue-500 rounded-md px-3 py-1.5 text-xs text-white font-medium">Filing Queue</a>
+        }
+        @if (isAdmin)
+        {
+          <a href="/Import" class="bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-md px-3 py-1.5 text-xs text-slate-300">Bulk Import</a>
+        }
+      </div>
+    </div>
+
+    <div class="grid grid-cols-5 gap-3 mb-5">
+      <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <div class="text-[10px] uppercase tracking-widest text-slate-500">Total Entities</div>
+        <div class="text-2xl font-semibold mt-1" x-text="kpi.totalEntities.toLocaleString()"></div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <div class="text-[10px] uppercase tracking-widest text-slate-500">Total Transactions</div>
+        <div class="text-2xl font-semibold mt-1" x-text="kpi.totalTransactions.toLocaleString()"></div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <div class="text-[10px] uppercase tracking-widest text-slate-500">Total Amount</div>
+        <div class="text-2xl font-semibold mt-1" x-text="fmtMoney(kpi.totalAmount)"></div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <div class="text-[10px] uppercase tracking-widest text-slate-500">Avg Transaction</div>
+        <div class="text-2xl font-semibold mt-1" x-text="fmtMoney(kpi.averageTransaction)"></div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <div class="text-[10px] uppercase tracking-widest text-slate-500">TOP + HIGH Entities</div>
+        <div class="text-2xl font-semibold mt-1 text-orange-400" x-text="kpi.topAndHighEntities.toLocaleString()"></div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4 mb-5">
+      <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <div class="text-sm font-medium mb-2">Risk Distribution</div>
+        <div id="chart-risk"></div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <div class="text-sm font-medium mb-2">Filings by Institution State (top 10)</div>
+        <div id="chart-state"></div>
+      </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
+      <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+        <div class="text-sm font-medium">Entities <span class="text-slate-500 text-xs ml-2" x-text="'('+rows.length+' records)'"></span></div>
+      </div>
+      <div id="grid" class="ag-theme-alpine-dark" style="height: 520px;"></div>
+    </div>
+
+    <div x-show="view==='geographic'" class="bg-slate-900 border border-slate-800 rounded-lg mt-5 p-4">
+      <div class="text-sm font-medium mb-3">Geographic Distribution (Institution State)</div>
+      <div id="map" style="height:400px; border-radius:6px;"></div>
+    </div>
+  </main>
+
+  <div id="backdrop" :class="{'open': drawerOpen}" @@click="closeDrawer()"></div>
+  <aside id="drawer" :class="{'open': drawerOpen}">
+    <div x-show="selected" class="flex flex-col h-full">
+      <div class="px-5 py-4 border-b border-slate-800 flex items-start justify-between">
+        <div class="flex-1">
+          <div class="text-[10px] uppercase tracking-widest text-slate-500">Entity</div>
+          <div class="text-lg font-semibold mt-0.5" x-text="selected?.subjectName || '(unnamed)'"></div>
+          <div class="flex items-center gap-2 mt-1">
+            <span class="inline-flex items-center gap-1 bg-slate-800 text-blue-300 font-mono text-xs px-2 py-0.5 rounded"
+              x-text="selected?.linkId === 'unlinked' ? '—' : selected?.linkId"></span>
+            <button @@click="copyLinkId()" class="text-slate-500 hover:text-blue-300 text-xs">⧉ Copy</button>
+          </div>
+        </div>
+        <button @@click="closeDrawer()" class="text-slate-500 hover:text-slate-200 text-xl leading-none">×</button>
+      </div>
+
+      <div class="border-b border-slate-800 px-2 flex">
+        <template x-for="t in ['overview','transactions','institution','transitions']" :key="t">
+          <div class="tab-btn" :class="{active: tab===t}" @@click="tab=t" x-text="t"></div>
+        </template>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-5 text-sm">
+        <div x-show="tab==='overview'" class="space-y-3">
+          <div class="flex items-center gap-3">
+            <span class="rb" :class="'rb-'+selected?.riskLevel" x-text="selected?.riskLevel"></span>
+            <span class="text-xs text-slate-500" x-text="(selected?.transactionCount || 0) + ' filings'"></span>
+          </div>
+          <dl class="grid grid-cols-2 gap-y-2 gap-x-4 text-xs">
+            <dt class="text-slate-500">Subject DOB</dt><dd x-text="selected?.subjectDob || '—'"></dd>
+            <dt class="text-slate-500">EIN/SSN (masked)</dt><dd x-text="maskSsn(selected?.subjectEinSsn)"></dd>
+            <dt class="text-slate-500">Total Amount</dt><dd x-text="fmtMoney(selected?.totalAmount)"></dd>
+            <dt class="text-slate-500">Latest Form Type</dt><dd x-text="selected?.formType || '—'"></dd>
+            <dt class="text-slate-500">Latest Filing Date</dt><dd x-text="fmtDate(selected?.filingDate)"></dd>
+            <dt class="text-slate-500">Latest BSA ID</dt><dd x-text="selected?.bsaId || '—'"></dd>
+            <dt class="text-slate-500">Zip3</dt><dd x-text="selected?.zip3 || '—'"></dd>
+          </dl>
+          <div class="mt-4 p-3 rounded-md bg-red-950/30 border border-red-900/40 text-[11px] text-red-300">
+            CONFIDENTIAL — SAR disclosure is prohibited under 31 USC 5318(g)(2).
+          </div>
+        </div>
+
+        <div x-show="tab==='transactions'" class="space-y-3">
+          <div class="text-xs text-slate-500" x-text="'All ' + (entityFilings.length || 0) + ' filings for this entity'"></div>
+          <table class="w-full text-xs">
+            <thead><tr class="text-slate-500 text-[10px] uppercase tracking-widest">
+              <th class="text-left py-1">Date</th>
+              <th class="text-left py-1">BSA ID</th>
+              <th class="text-left py-1">Form</th>
+              <th class="text-right py-1">Amount</th>
+              <th class="text-left py-1">Risk</th>
+              <th class="text-left py-1">PDF</th>
+            </tr></thead>
+            <tbody>
+              <template x-for="f in entityFilings" :key="f.id">
+                <tr class="border-t border-slate-800">
+                  <td class="py-1.5" x-text="fmtDate(f.filingDate)"></td>
+                  <td class="font-mono text-[11px] text-slate-400" x-text="f.bsaId"></td>
+                  <td x-text="f.formType"></td>
+                  <td class="text-right" x-text="fmtMoney(f.amountTotal)"></td>
+                  <td><span class="rb" :class="'rb-'+f.riskLevel" x-text="f.riskLevel"></span></td>
+                  <td><button @@click="downloadPdf(f.id)" class="text-blue-400 hover:underline text-xs">PDF</button></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          <div class="mt-4">
+            <div class="text-[10px] uppercase tracking-widest text-slate-500 mb-2">Activity Over Time</div>
+            <div id="chart-subject"></div>
+          </div>
+        </div>
+
+        <div x-show="tab==='institution'" class="space-y-2 text-xs">
+          <dl class="grid grid-cols-2 gap-y-2 gap-x-4">
+            <dt class="text-slate-500">Latest Institution Type</dt><dd x-text="selected?.institutionType || '—'"></dd>
+            <dt class="text-slate-500">Latest Institution State</dt><dd x-text="selected?.institutionState || '—'"></dd>
+            <dt class="text-slate-500">Latest Regulator</dt><dd x-text="selected?.regulator || '—'"></dd>
+          </dl>
+        </div>
+
+        <div x-show="tab==='transitions'" class="space-y-2">
+          <div class="text-xs text-slate-500">Filing transitions are done from the <a href="/Filing" class="text-blue-400 hover:underline">Filing Queue</a> on a per-filing basis. Select an individual filing in the Transactions tab and use the PDF link for its full detail.</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="toast-wrap">
+    <template x-for="t in toasts" :key="t.id">
+      <div class="toast" :class="'toast-'+t.kind" x-text="t.msg"></div>
+    </template>
+  </div>
+</div>
+
+<script>
+  // --- Grid instance lives outside the Alpine component ---
+  // Alpine wraps returned state in a Proxy. AG Grid's internal `this` bindings
+  // break when its instance is stored inside a Proxy. Keeping `_g` here avoids that.
+  let _g = null;
+  let _chartRisk = null, _chartState = null, _chartSubject = null, _map = null;
+
+  function aim() {
+    return {
+      // Views reduced — Geographic becomes part of the default dashboard
+      views: [
+        {id:'overview', label:'Overview'},
+        {id:'geographic', label:'Geographic'},
+      ],
+      view: 'overview',
+
+      rows: [],                    // entity rows from /api/entities
+      kpi: {
+        totalEntities: 0, totalTransactions: 0, totalAmount: 0,
+        averageTransaction: 0, topAndHighEntities: 0
+      },
+      filterOpts: { subjectStates: [], institutionStates: [], transactionTypes: [] },
+      filters: {
+        search: '', subjectState: '', institutionState: '',
+        transactionType: '', riskLevel: [],
+        window: '90', dateFrom: '', dateTo: ''
+      },
+      baselineByRisk: {},
+
+      drawerOpen: false,
+      selected: null,              // first filing in the entity group (used for the default detail view)
+      entityFilings: [],           // all filings for the open entity
+      tab: 'overview',
+      toasts: [],
+      toastId: 0,
+
+      isAdmin: @(User.IsInRole("Admin") ? "true" : "false"),
+      isAnalyst: @(User.IsInRole("Analyst") || User.IsInRole("Admin") ? "true" : "false"),
+
+      async init() {
+        this.applyWindow();
+        await this.loadFilterOpts();
+        await this.reload();
+        this.buildGrid();
+      },
+
+      applyWindow() {
+        const w = this.filters.window;
+        if (w === 'all') { this.filters.dateFrom = ''; this.filters.dateTo = ''; return; }
+        const days = parseInt(w, 10);
+        const now = new Date();
+        const from = new Date(now);
+        from.setDate(from.getDate() - days);
+        const iso = d => d.toISOString().slice(0, 10);
+        this.filters.dateFrom = iso(from);
+        this.filters.dateTo = iso(now);
+      },
+
+      setView(v) { this.view = v; if (v === 'geographic') this.$nextTick(() => this.ensureMap()); },
+
+      setRisk(r) {
+        if (r === '') this.filters.riskLevel = [];
+        else if (this.filters.riskLevel.includes(r)) this.filters.riskLevel = this.filters.riskLevel.filter(x => x !== r);
+        else this.filters.riskLevel = [...this.filters.riskLevel, r];
+        this.reload();
+      },
+
+      queryString(opts = {}) {
+        const p = new URLSearchParams();
+        if (this.filters.search) p.set('search', this.filters.search);
+        if (this.filters.subjectState) p.set('subjectState', this.filters.subjectState);
+        if (this.filters.institutionState) p.set('institutionState', this.filters.institutionState);
+        if (this.filters.transactionType) p.set('transactionType', this.filters.transactionType);
+        if (!opts.omitRisk && this.filters.riskLevel.length) p.set('riskLevel', this.filters.riskLevel.join(','));
+        if (this.filters.dateFrom) p.set('dateFrom', this.filters.dateFrom);
+        if (this.filters.dateTo) p.set('dateTo', this.filters.dateTo);
+        return p.toString();
+      },
+
+      async loadFilterOpts() {
+        try {
+          const r = await fetch('/api/filters');
+          if (!r.ok) throw new Error(r.status);
+          const d = await r.json();
+          this.filterOpts.subjectStates = d.subjectStates || [];
+          this.filterOpts.institutionStates = d.institutionStates || [];
+          this.filterOpts.transactionTypes = d.transactionTypes || [];
+        } catch {
+          this.toast('error', 'Session expired or API unreachable. Please refresh.');
+        }
+      },
+
+      async reload() {
+        const qs = this.queryString();
+        const safe = async (url, fallback) => {
+          try {
+            const r = await fetch(url);
+            if (!r.ok) throw new Error(r.status);
+            return await r.json();
+          } catch {
+            throw new Error('fetch-failed');
+          }
+        };
+        try {
+          const baselineQs = this.queryString({ omitRisk: true });
+          const [rows, summary, risk, states, baseline] = await Promise.all([
+            safe('/api/entities?' + qs),
+            safe('/api/entity-summary?' + qs),
+            safe('/api/risk-amounts?' + qs),
+            safe('/api/filings-by-state?' + qs),
+            safe('/api/entity-summary?' + baselineQs),
+          ]);
+          this.rows = rows;
+          this.kpi = summary;
+          this.baselineByRisk = { ...(baseline.byRiskLevel || {}), __total: baseline.totalEntities };
+          if (_g) _g.setGridOption('rowData', this.rows);
+          this.renderCharts(risk, states);
+        } catch {
+          this.toast('error', 'Session expired or API unreachable. Please refresh.');
+        }
+      },
+
+      buildGrid() {
+        const el = document.getElementById('grid');
+        const defs = [
+          {
+            headerName: 'Link ID', field: 'linkId', width: 150, sortable: true,
+            cellRenderer: p => {
+              const v = p.value || '';
+              const isUnlinked = v === 'unlinked';
+              const label = isUnlinked ? '—' : v;
+              const pill = `<span class="inline-flex items-center gap-1 bg-slate-800 text-blue-300 font-mono text-xs px-2 py-0.5 rounded">${label}</span>`;
+              const copy = isUnlinked ? '' : `<button data-copy="${v}" title="Copy Link ID" class="ml-1 text-slate-500 hover:text-blue-300 text-xs">⧉</button>`;
+              return pill + copy;
+            }
+          },
+          { headerName: 'Subject', field: 'subjectName', flex: 1.4, minWidth: 180 },
+          { headerName: 'Transactions', field: 'transactionCount', width: 120, type: 'rightAligned' },
+          {
+            headerName: 'Total Amount', field: 'totalAmount', width: 140, type: 'rightAligned',
+            valueFormatter: p => this.fmtMoney(p.value)
+          },
+          { headerName: 'Activity', field: 'activityLocation', width: 100 },
+          {
+            headerName: 'First Tx', field: 'firstTxDate', width: 120,
+            valueFormatter: p => this.fmtDate(p.value)
+          },
+          {
+            headerName: 'Last Tx', field: 'lastTxDate', width: 120,
+            valueFormatter: p => this.fmtDate(p.value)
+          },
+          {
+            headerName: 'Risk', field: 'riskLevel', width: 110,
+            cellRenderer: p => `<span class="rb rb-${p.value}">${p.value}</span>`
+          },
+        ];
+        _g = agGrid.createGrid(el, {
+          columnDefs: defs,
+          rowData: this.rows,
+          defaultColDef: { sortable: true, resizable: true, filter: true },
+          pagination: true,
+          paginationPageSize: 25,
+          paginationPageSizeSelector: [10, 15, 25, 50],
+          onCellClicked: e => {
+            // If the copy button was clicked, copy and stop — don't open modal.
+            const tgt = e.event && e.event.target;
+            if (tgt && tgt.dataset && tgt.dataset.copy) {
+              navigator.clipboard.writeText(tgt.dataset.copy);
+              this.toast('success', 'Copied ' + tgt.dataset.copy);
+              e.event.stopPropagation();
+              return;
+            }
+            this.openEntity(e.data);
+          },
+          rowSelection: 'single',
+        });
+      },
+
+      renderCharts(risk, states) {
+        const riskColors = { TOP:'#ef4444', HIGH:'#f97316', MODERATE:'#eab308', LOW:'#22c55e' };
+        const riskOpts = {
+          chart: { type:'donut', height:260, background:'transparent', toolbar:{show:false} },
+          series: risk.map(r => r.count),
+          labels: risk.map(r => r.riskLevel),
+          colors: risk.map(r => riskColors[r.riskLevel] || '#6366f1'),
+          legend: { labels: { colors: '#94a3b8' }, position: 'bottom' },
+          theme: { mode: 'dark' },
+          plotOptions: { pie: { donut: { size:'68%' } } },
+          dataLabels: { style: { colors: ['#fff'] } },
+          stroke: { colors: ['#0f172a'] },
+        };
+        const top = states.slice(0, 10);
+        const stateOpts = {
+          chart: { type:'bar', height:260, background:'transparent', toolbar:{show:false} },
+          series: [{ name: 'Filings', data: top.map(s => s.count) }],
+          xaxis: { categories: top.map(s => s.state), labels: { style: { colors: '#64748b' } } },
+          yaxis: { labels: { style: { colors: '#64748b' } } },
+          colors: ['#60a5fa'],
+          theme: { mode: 'dark' },
+          grid: { borderColor: '#1e293b' },
+          plotOptions: { bar: { borderRadius: 3, horizontal: false } },
+          dataLabels: { enabled: false },
+        };
+        if (_chartRisk) _chartRisk.updateOptions(riskOpts, true, true);
+        else { _chartRisk = new ApexCharts(document.getElementById('chart-risk'), riskOpts); _chartRisk.render(); }
+        if (_chartState) _chartState.updateOptions(stateOpts, true, true);
+        else { _chartState = new ApexCharts(document.getElementById('chart-state'), stateOpts); _chartState.render(); }
+      },
+
+      ensureMap() {
+        if (_map) { setTimeout(() => _map.invalidateSize(), 50); return; }
+        _map = L.map('map', { zoomControl: true }).setView([39.5, -98.35], 4);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap',
+          subdomains: 'abc',
+        }).addTo(_map);
+        setTimeout(() => _map.invalidateSize(), 50);
+      },
+
+      async openEntity(row) {
+        this.drawerOpen = true;
+        this.tab = 'overview';
+        this.entityFilings = [];
+        this.selected = { linkId: row.linkId, subjectName: row.subjectName,
+                          riskLevel: row.riskLevel, transactionCount: row.transactionCount,
+                          totalAmount: row.totalAmount };
+        const list = await fetch('/api/bsa-reports/subjects/' + encodeURIComponent(row.linkId))
+          .then(x => x.ok ? x.json() : []);
+        this.entityFilings = list;
+        // Populate selected with the most recent filing's detail fields for the Overview tab
+        if (list.length) {
+          const r = list[0];
+          this.selected = { ...this.selected,
+            formType: r.formType, filingDate: r.filingDate, transactionDate: r.transactionDate,
+            subjectState: r.subjectState, subjectDob: r.subjectDob, subjectEinSsn: r.subjectEinSsn,
+            amountTotal: r.amountTotal, suspiciousActivityType: r.suspiciousActivityType,
+            transactionType: r.transactionType, institutionType: r.institutionType,
+            institutionState: r.institutionState, regulator: r.regulator, status: r.status,
+            zip3: r.zip3, bsaId: r.bsaId, finCenFilingNumber: r.finCenFilingNumber,
+            isAmendment: r.isAmendment, latestFiling: r.latestFiling, receiptDate: r.receiptDate
+          };
+          this.renderSubjectChart(list);
+        }
+      },
+
+      renderSubjectChart(filings) {
+        const pts = filings
+          .filter(t => t.filingDate && t.amountTotal != null)
+          .map(t => ({ x: new Date(t.filingDate).getTime(), y: Number(t.amountTotal) }))
+          .sort((a, b) => a.x - b.x);
+        const opts = {
+          chart: { type:'line', height:160, background:'transparent', toolbar:{show:false} },
+          series: [{ name: 'Amount', data: pts }],
+          xaxis: { type: 'datetime', labels: { style: { colors: '#64748b' } } },
+          yaxis: { labels: { style: { colors: '#64748b' }, formatter: v => '$' + Number(v).toLocaleString() } },
+          stroke: { curve: 'smooth', width: 2 },
+          colors: ['#60a5fa'],
+          theme: { mode: 'dark' },
+          grid: { borderColor: '#1e293b' },
+          dataLabels: { enabled: false },
+        };
+        this.$nextTick(() => {
+          if (_chartSubject) _chartSubject.updateOptions(opts, true, true);
+          else { _chartSubject = new ApexCharts(document.getElementById('chart-subject'), opts); _chartSubject.render(); }
+        });
+      },
+
+      closeDrawer() { this.drawerOpen = false; this.selected = null; this.entityFilings = []; },
+
+      copyLinkId() {
+        if (!this.selected?.linkId || this.selected.linkId === 'unlinked') return;
+        navigator.clipboard.writeText(this.selected.linkId);
+        this.toast('success', 'Copied ' + this.selected.linkId);
+      },
+
+      async downloadPdf(id) {
+        if (!id) return;
+        window.location.href = `/api/bsa-reports/${id}/export.pdf`;
+      },
+
+      exportCsv() {
+        window.location.href = '/api/bsa-reports/export.csv?' + this.queryString();
+      },
+
+      toast(kind, msg) {
+        const id = ++this.toastId;
+        this.toasts.push({ id, kind, msg });
+        setTimeout(() => this.toasts = this.toasts.filter(t => t.id !== id), 1500);
+      },
+
+      fmtMoney(m) {
+        if (m == null) return '—';
+        const n = Number(m);
+        if (!isFinite(n)) return '—';
+        return '$' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      },
+      fmtDate(d) {
+        if (!d) return '—';
+        const t = new Date(d);
+        if (isNaN(t)) return '—';
+        return t.toISOString().slice(0, 10);
+      },
+      maskSsn(s) {
+        if (!s) return '—';
+        if (s.length <= 4) return '*'.repeat(s.length);
+        return '*'.repeat(s.length - 4) + s.slice(-4);
+      },
+    };
+  }
+</script>
+
+</body>
+</html>

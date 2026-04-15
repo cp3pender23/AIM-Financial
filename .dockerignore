@@ -1,0 +1,12 @@
+**/bin
+**/obj
+**/.vs
+**/*.user
+**/appsettings.Development.json
+.git
+.github
+.claude
+.remember
+docs
+database/ImportBsa/bin
+database/ImportBsa/obj

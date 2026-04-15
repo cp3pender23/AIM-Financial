@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git *)",
+      "Bash(dotnet --version)",
+      "Bash(dotnet --list-sdks)",
+      "Bash(dotnet build *)",
+      "Bash(dotnet run *)",
+      "Bash(dotnet restore *)",
+      "Bash(dotnet ef *)",
+      "Bash(dotnet user-secrets *)",
+      "Bash(dotnet tool *)",
+      "Bash(psql *)",
+      "Bash(pg_dump *)",
+      "Bash(pg_isready)",
+      "Bash(curl *)",
+      "Bash(netstat *)",
+      "Bash(taskkill *)"
+    ]
+  }
+}

@@ -1,4 +1,7 @@
-node_modules/
-*.log
-.DS_Store
-~$*
+bin/
+obj/
+.vs/
+*.user
+appsettings.Development.json
+secrets/*.env
+!secrets/*.example
