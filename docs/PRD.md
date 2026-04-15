@@ -1,235 +1,193 @@
 # AIM — Product Requirements Document
 
-**Version**: 1.0  
-**Last Updated**: April 2026  
-**Status**: Living document — update when features ship or requirements change
+**Version**: 2.0 (BSA/FinCEN port, 2026-04-15)
+**Supersedes**: the 1.x vendor-scoring PRD (archived on `legacy/vendor-scoring` branch).
 
----
+## 1. Vision
 
-## 1. Executive Summary
+AIM (Adaptive Intelligence Monitor) is a predictive analytics and workflow platform for Bank Secrecy Act (BSA) / FinCEN suspicious activity reports (SARs). It ingests historical filings via CSV, supports interactive draft-to-submission workflow for new filings, and surfaces risk-tiered analytics to investigators, analysts, and supervisors.
 
-AIM (Adaptive Intelligence Monitor) is an internal brand protection intelligence platform. It ingests vendor data from multiple external companies, scores each vendor for brand risk, and provides a real-time analytics dashboard so analysts and investigators can monitor their brand protection posture and prioritize enforcement actions.
+**Core problem**: Financial institutions and law-enforcement analysts receive high volumes of SAR data with no consistent way to triage, visualize, or move filings through a reviewed submission process while meeting FinCEN retention and confidentiality requirements.
 
-**The core problem it solves**: Brand teams receive raw vendor data from multiple sources in varying formats. Without AIM, analysts manually sift through spreadsheets to identify high-risk vendors. AIM automates ingestion, normalizes data, applies consistent risk scoring, and surfaces insights through an interactive dashboard — reducing time-to-action from days to minutes.
+**Elevator pitch**: Turn raw BSA filings into a prioritized, risk-tiered picture that analysts can act on while staying within FinCEN compliance.
 
----
-
-## 2. Goals and Success Metrics
+## 2. Goals and success metrics
 
 | Goal | Metric | Target |
-|------|--------|--------|
-| Maintain brand health | Brand Protection Index | >70% of vendors at LOW/MODERATE risk |
-| Fast analysis | Dashboard load time | <2 seconds |
-| Efficient data ops | Pipeline end-to-end | <10 minutes from CSV to visible in dashboard |
-| Risk visibility | Coverage | 100% of known vendor+product pairs scored |
+|---|---|---|
+| Efficient SAR triage | Time from import to first analyst action | < 10 minutes |
+| Dashboard responsiveness | Initial load | < 3 s |
+| Dashboard filter responsiveness | Filter-to-grid update | < 500 ms |
+| Filing workflow throughput | Drafts per analyst per day | ≥ 25 (varies by org) |
+| Compliance | 100% of mutations captured in `audit_log` | hard requirement |
+| Concurrency | Simultaneous users supported | 100+ |
 
----
+## 3. Personas
 
-## 3. User Personas
+| Persona | Role | Primary activities | AIM role mapping |
+|---|---|---|---|
+| **Investigator** | Law enforcement / compliance | Drill into subjects, trace link-analysis clusters, build cases, export evidence | Analyst or Admin |
+| **Analyst** | Internal AML / compliance analyst | Triage new filings, prepare drafts, respond to reviewer feedback | Analyst |
+| **Supervisor / Manager** | Oversight of analyst team | Review queues, approve filings, monitor compliance metrics | Admin |
+| **Task-force member** | Cross-agency | Read-only access to shared filings | Viewer |
 
-### Brand Analyst
-Uses the dashboard daily. Needs: fast load, clear risk tier colors, Brand Protection Index trend, ability to filter by tier and export data for reports. Does not run the data pipeline.
+See `§ Open questions` for whether Supervisor and Task-force are distinct roles or fold into Admin/Viewer.
 
-### Investigator
-Builds cases against specific vendors. Needs: detail drawer with intelligence flags, evidence bundle export, geographic view to understand vendor footprint. Will use the action buttons (Flag/Watchlist) once persistence is implemented.
+## 4. Functional requirements
 
-### Data Ops Operator
-Receives CSV files from partner companies weekly or monthly. Needs: clear pipeline commands, batch review queries, ability to reject bad data, visibility into what changed after each ingestion.
+### 4.1 Authentication & authorization (FR-AUTH)
+- Local username/password login via ASP.NET Identity (PBKDF2 hashing).
+- Three roles seeded: `Admin`, `Analyst`, `Viewer`. Role claims enforced via `AimPolicies` in `Program.cs`.
+- Cookie auth with 30-minute sliding expiration, HttpOnly, SameSite=Lax.
+- Unauthenticated requests to `/` or `/api/*` redirect to `/Identity/Account/Login`.
+- `/healthz` is anonymous.
 
----
+### 4.2 Audit log (FR-AUDIT)
+- Every mutation (`Create`, `Update`, `Transition`, `Submit`, `Delete`, `ImportBatch`, `Login`, `Logout`) writes one row to `audit_log`.
+- Each row captures actor user id, display name, action, entity type, entity id, `oldValuesJson`, `newValuesJson`, IP address, timestamp.
+- `GET /api/audit?entityId=…` is read-only, Admin-only.
+- Append-only — no application path deletes audit rows.
 
-## 4. Feature Inventory
+### 4.3 Dashboard KPIs (FR-KPI)
+Four KPI cards on the main dashboard reconcile exactly with `/api/summary`:
+- Total Filings (count)
+- TOP + HIGH Risk (count)
+- Total Amount Under Suspicion (sum of `amount_total`)
+- Amendments (count where `is_amendment=true`)
 
-### 4.1 Dashboard (Overview)
+Additional header stats available via `/api/summary`:
+- Oldest / Newest filing date
+- Unique subjects
+- Average amount
+- Breakdown by RiskLevel and by Status
 
-**Brand Protection Index**
-- Calculated as `(MODERATE + LOW vendor+product pairs) / Total * 100`
-- Displayed as a large percentage with a "Target above 70%" callout
-- "Live" indicator with pulsing dot
-- Refreshes on every data load or filter change
+### 4.4 Filters (FR-FILTER)
+Filter set applied across every analytics endpoint via `BsaReportService.ApplyFilters`:
+- `formType`, `regulator`, `institutionType`, `institutionState`, `subjectState`, `riskLevel`, `transactionType`, `suspiciousActivityType`, `status`, `amendment` (bool)
+- Date range on `filingDate` (`dateFrom` / `dateTo`)
+- Amount range (`amountMin` / `amountMax`)
+- Free-text `search` (ILIKE on `subjectName`, `bsaId`, `formType`)
 
-**KPI Cards (4)**
-| Card | Value | Description |
-|------|-------|-------------|
-| Total Vendors | Unique vendor names in current filter | Distinct company count |
-| TOP + HIGH Risk | Unique vendor names in TOP or HIGH tier | Immediate attention required |
-| Products Tracked | Unique product names in current filter | Distinct product SKU count |
-| Unverified Sellers | Unique vendor names with VERIFIED_COMPANY=false | Sellers with no company verification |
+UI: filters combine with AND logic, persist across views in a single session.
 
-Each KPI card shows a sparkline trend (decorative, not based on historical data).
+### 4.5 Charts (FR-CHART)
+- **Risk Distribution** donut — TOP/HIGH/MODERATE/LOW counts. Click-to-filter.
+- **Filings by Institution State** bar — top 10 states by count.
+- (Per-subject, in the detail modal) — **Activity over Time** line chart from 20 recent filings.
 
-**Risk Distribution Chart (Donut)**
-- Shows vendor+product pair count per tier (TOP/HIGH/MODERATE/LOW)
-- Updates when risk tier filter is active — shows only selected tiers
-- Legend on right with count per tier
+### 4.6 Data grid (FR-GRID)
+- AG Grid Community 31.3 with dark theme.
+- Columns: Subject, BSA ID, Form Type, Filing Date, Amount, Risk Level (badge), Status (badge), Institution State, Regulator, Amendment.
+- Pagination sizes: 25 / 50 / 100 (AIM-Codex default; see Open questions).
+- Row click → detail modal.
+- CSV export via `/api/bsa-reports/export.csv` respects current filter.
 
-**Annual Sales by State (Bar Chart)**
-- Top 10 states by SUM(annual_sales)
-- Updates when risk tier filter is active
-- Y-axis formatted in $M (millions)
+### 4.7 Subject detail modal (FR-DETAIL)
+- Field grid of the clicked filing.
+- 20 most-recent transactions for the subject (`/api/subject-details`).
+- Activity-over-time chart (ApexCharts line).
+- **Related Subjects** panel using `buildLinkId` 6-char SHA-256 hash over `subject_ein_ssn + "|" + subject_dob` — identical hash means the same real person. `GET /api/bsa-reports/subjects/{linkId}`.
+- **Download PDF** button → QuestPDF single-page filing.
+- **Transitions** tab with legal next states (role-gated).
 
-### 4.2 Risk Tier Filter (Sidebar)
+### 4.8 Filing workflow (FR-FLOW)
+State machine on `bsa_reports.status`:
+- `Draft → PendingReview` (Analyst)
+- `PendingReview → Approved | Rejected` (Admin)
+- `Approved → Submitted` (Admin; invokes `IFinCenClient.SubmitAsync`)
+- `Submitted → Acknowledged` (acknowledgement; stubbed)
+- `Rejected → Draft` (Analyst can revise)
 
-- Four tiers: TOP (red), HIGH (orange), MODERATE (amber), LOW (green)
-- **Multi-select**: click multiple tiers to combine (e.g., TOP + HIGH together)
-- Click "All" to clear all selections and return to full dataset
-- Clicking an active tier deselects it
-- Filter is client-side — all 2,573 vendor+product pairs are pre-loaded; no server round-trip on filter change
-- Affects: grid, KPI cards, donut chart, annual sales chart
-- Keyboard shortcuts: T=TOP, H=HIGH, M=MODERATE, L=LOW, A=All
+Rejection captures a reason in `rejection_reason`. Illegal transitions → 409 Conflict. Role violations → 403 Forbidden.
 
-### 4.3 Vendor Intelligence Grid
+### 4.9 FinCEN submission (FR-FINCEN-STUB)
+- `IFinCenClient` interface with `SubmitAsync` + `CheckStatusAsync`.
+- `StubFinCenClient` is registered today. Returns a GUID receipt, logs a line, never hits the network.
+- `FinCen` config section in `appsettings.json` (`ApiUrl`, `ApiKey`, `SubmissionTimeoutSeconds`, `Enabled=false`).
+- Swap to a live `FinCenClient` is one line in `Program.cs`.
 
-- Powered by AG Grid Community Edition
-- Columns: Risk badge, Vendor Name, Product Name, Category, Location, Annual Sales, Risk Score (bar), Verified (checkmark), Actions
-- Sortable and filterable on all columns
-- Quick search with 250ms debounce
-- Multi-row selection with bulk "Flag for Review" action
-- "Export CSV" button downloads current filtered view
-- Row click opens Detail Drawer
-- Record count shown as badge ("N records")
+### 4.10 Exports (FR-EXPORT)
+- **CSV export** of filtered grid — streaming, includes all columns.
+- **PDF export** of a single filing — QuestPDF, masked EIN/SSN, confidentiality footer per 31 USC 5318(g)(2).
 
-**Location Column**
-- Shows primary city, state
-- If vendor+product has multiple locations (LOCATION_COUNT > 1), shows "(+N more)" in blue
+### 4.11 Bulk import (FR-IMPORT)
+- Admin-only `/Import` page.
+- Upload CSV → POST preview (`/api/bsa-reports/import/preview`) returns first 20 rows + per-row validation errors + total row counts.
+- Commit endpoint (`/api/bsa-reports/import/commit`) persists in a single transaction with a `BatchId` GUID, `Status=Acknowledged`, writes one `ImportBatch` audit entry.
+- CLI equivalent: `dotnet run --project database/ImportBsa -- --csv <path>`.
 
-### 4.4 Detail Drawer
+### 4.12 Risk derivation (FR-DERIVE)
+- `RiskLevel`: `amount_total >= 50000 → TOP`, `>= 20000 → HIGH`, `>= 5000 → MODERATE`, else `LOW`.
+- `Zip3`: first 3 digits of `subject_ein_ssn` after stripping non-digits.
+- Derivations run at import time and at draft creation. Changing thresholds requires a backfill migration.
 
-Slides in from the right (472px wide). Three tabs:
+## 5. Non-functional requirements
 
-**Overview Tab**
-- Seller name, category, phone, email, address
-- All Locations section: if LOCATION_COUNT > 1, shows pills for each city/state from LOCATIONS_CSV
-- Listing URL (linked)
-- Annual sales, product price, price difference (color-coded green/red)
-- Company verification status (Verified ✓ / Unverified ✗)
+### 5.1 Performance
+- Dashboard initial load < 3 s, filter response < 500 ms.
+- Supports 100+ concurrent users on a single-node deployment at the current data scale.
 
-**Intelligence Tab**
-- Rating Score bar (0–100%, blue)
-- Product Diversity Score bar (purple)
-- Total Score bar (color by tier)
-- Intelligence flags:
-  - Article Finding: ⚠ Detected / ✓ None
-  - Seller Name Change: ⚠ Changed / ✓ Stable
-  - Address Mismatch: ⚠ Mismatch / ✓ Consistent
-- Source article link (if ARTICLE_URL present)
+### 5.2 Security
+- HTTPS in production (`app.UseHttpsRedirection()` + TLS cert at deployment).
+- PBKDF2 password hashing (ASP.NET Identity default).
+- Parameterized queries via EF Core.
+- Security headers middleware in production (HSTS via `app.UseHsts()`).
+- Session cookies: HttpOnly, SameSite=Lax, 30-min sliding.
+- CSRF: Razor Pages default antiforgery on; `/api/*` explicitly opt-out (justified: JSON-only, cookie + SameSite=Lax).
 
-**Actions Tab**
-- Flag for Takedown Review (red)
-- Add to Watchlist (amber)
-- Export Evidence Bundle — downloads JSON of the full vendor record
-- Mark as Safe / Dismiss (green, closes drawer)
-- Note: "All actions are logged for audit trail purposes" (currently toast-only — not persisted)
+### 5.3 Accessibility
+- WCAG 2.1 AA target: keyboard navigation, screen-reader-labeled buttons, visible focus rings, color contrast meeting AA.
 
-### 4.5 Geographic View
+### 5.4 Browser support
+- Latest 2 major versions of Chrome, Firefox, Edge, Safari.
 
-- Leaflet map with CartoDB Dark tiles (free, no API key required)
-- Centered on continental USA at zoom level 4
+### 5.5 BSA compliance
+- **Retention**: `bsa_reports` and `audit_log` retained 5 years minimum (no hard-delete path).
+- **Confidentiality**: 31 USC 5318(g)(2) banner on filing detail views and PDF footer.
+- **SAR filing timelines**: UI shows deadline indicators on Draft rows (30-day initial detection, 60-day continuing activity) — to be implemented in a future pass.
 
-**State Level (initial)**
-- Circular bubble markers per state with vendor+product count
-- Color by high-risk percentage: red>50%, orange 30–50%, amber 10–30%, green<10%
-- Marker size scales with vendor count
-- Side panel lists all states with count and high-risk count
-- Click state → zooms to state level, shows city markers
+### 5.6 PII
+- `subject_ein_ssn` masked in UI and PDF to last 4 digits.
+- Never logged, never in URL query strings, never indexed directly.
+- `zip3` is a coarse bucket for analytics only; never displayed as a postal zip.
 
-**City Level**
-- City markers geocoded via Nominatim (OpenStreetMap), rate-limited to 1.1s per request
-- Coordinates cached in sessionStorage for the session
-- Side panel lists cities sorted by vendor count descending
-- Click city → shows products at that city
+## 6. Data model
 
-**Product Level**
-- Lists vendor+product pairs present at the selected city
-- Shows risk badge and location string (e.g., "TX: Dallas, Houston • FL: Miami")
-- Click product → opens Detail Drawer
+Single primary table `bsa_reports` (see `docs/database.md` for the full field reference). Supporting tables: `audit_log`, and ASP.NET Identity (`AspNet*`).
 
-Breadcrumb navigation: "United States / Texas / Dallas" with back button.
+## 7. Default seeded credentials (dev only)
 
-### 4.6 Data Pipeline
+| Email | Password | Role |
+|---|---|---|
+| `admin@aim.local` | `Admin123!Seed` | Admin |
+| `analyst@aim.local` | `Analyst123!Seed` | Analyst |
+| `viewer@aim.local` | `Viewer123!Seed` | Viewer |
 
-Full documentation in [data-pipeline.md](data-pipeline.md). Summary:
+Rotate before any non-local deployment.
 
-1. **Register** external company in `raw.data_sources`
-2. **Ingest** CSV via `dotnet run -- <source> <file.csv>` → creates batch in `raw.vendor_details`
-3. **Review** batch with SELECT queries using batch UUID
-4. **Promote** via `psql -v batch_id="'<uuid>'" -f database/promote.sql` → copies to `master.vendor_details`
-5. **Score** via `psql -f database/score.sql` → rebuilds `master.vendor_scores`
-6. Dashboard reflects changes immediately — no app restart needed
+## 8. Success metrics
 
-### 4.7 Navigation
+- **Adoption**: % of analysts logging in at least weekly.
+- **Session duration**: median analyst session length.
+- **Filter usage**: fraction of sessions using at least one filter.
+- **Investigations initiated**: drafts created per week.
+- **CSAT**: quarterly user survey, 4+/5 target.
 
-| View | Description |
-|------|-------------|
-| Overview | Default dashboard — KPI cards, charts, grid |
-| Risk Intelligence | Same as Overview, scrolls to grid on navigate |
-| Products | Same as Overview with product focus |
-| Geographic | Leaflet map view |
-| Reports | Placeholder — "coming soon" toast |
+## 9. Open questions (decide during implementation, not blockers)
 
----
+1. **Auditor role** — add a 4th role for segregation of duties?
+2. **Multi-agency sharing** — roadmap or out of scope?
+3. **Encryption at rest** for `subject_ein_ssn` — pgcrypto column encryption now, or infra-level disk encryption only?
+4. **Supervisor/Manager persona** — distinct, or fold into Admin?
+5. **Task-force persona** — distinct read-only cross-agency viewer, or fold into Viewer?
+6. **Evidence-export bundle** (PDF + supporting docs zipped for law-enforcement referral) — v1 or future?
+7. **Tamper-evident audit trail** (append-only + hash chain) — v1 or "plain append-only is enough"?
+8. **Pagination sizes** — 25/50/100 (AIM-Codex default) or 50/100/250?
+9. **CSV export for Viewer role** — redact `subject_ein_ssn` or match current full-export behavior?
 
-## 5. Functional Requirements
+## 10. Explicitly out of scope for this release
 
-| ID | Requirement | Status |
-|----|-------------|--------|
-| FR-01 | Dashboard displays Brand Protection Index as a percentage | Done |
-| FR-02 | Dashboard shows 4 KPI cards with unique entity counts | Done |
-| FR-03 | Risk Distribution donut chart updates with tier filter | Done |
-| FR-04 | Annual Sales by State chart updates with tier filter | Done |
-| FR-05 | Risk tier filter supports multi-select (combine tiers) | Done |
-| FR-06 | Vendor Intelligence Grid sortable and searchable | Done |
-| FR-07 | Grid export to CSV | Done |
-| FR-08 | Detail Drawer with Overview, Intelligence, Actions tabs | Done |
-| FR-09 | Evidence bundle export as JSON | Done |
-| FR-10 | Geographic map with state→city→product drill-down | Done |
-| FR-11 | LOCATIONS_CSV shows all cities/states per vendor+product | Done |
-| FR-12 | Data pipeline: IngestCsv + promote.sql + score.sql | Done |
-| FR-13 | Authentication and Authorization | Not started |
-| FR-14 | Reports Module with configurable views | Not started |
-| FR-15 | Persistent action log for Flag/Watchlist/Safe actions | Not started |
-| FR-16 | Automated test suite (unit + integration + E2E) | Not started |
-| FR-17 | CI/CD pipeline | Not started |
-| FR-18 | HTTPS enforcement | Not started |
-
----
-
-## 6. Non-Functional Requirements
-
-| Category | Requirement |
-|----------|-------------|
-| Performance | Dashboard loads in <2s on initial page load |
-| Performance | Risk tier filter applies in <100ms (client-side filtering) |
-| Scalability | Grid handles 10,000+ vendor+product pairs without degradation |
-| Reliability | Data pipeline is idempotent — re-running score.sql produces consistent results |
-| Traceability | Every master record traces back to a raw batch and source company |
-| Data Integrity | No vendor record promoted without vendor_name and product_name |
-
----
-
-## 7. Out of Scope (Current Version)
-
-- User authentication (FR-13) — on roadmap
-- Reports module (FR-14) — on roadmap
-- Real-time pipeline automation — manual pipeline steps are intentional for data review control
-- Multi-tenant support — single organization use only
-- Mobile-responsive design — desktop-first, monitor width assumed
-
----
-
-## 8. Roadmap
-
-### Next Priority
-1. **FR-13 Authentication** — JWT bearer auth with Analyst / Investigator / DataOps / Admin roles. Blocking for production deployment.
-2. **FR-15 Action Persistence** — Add `master.vendor_actions` table, persist Flag/Watchlist/Safe events with timestamp and user
-3. **FR-16 Automated Tests** — Playwright E2E for UI, WebApplicationFactory for API integration tests
-
-### Medium Term
-4. **FR-14 Reports Module** — Configurable saved views, scheduled PDF exports
-5. **FR-17 CI/CD** — GitHub Actions build + test + deploy pipeline
-6. **FR-18 HTTPS** — Certificate configuration and redirect
-
-### Long Term
-- Scoring algorithm improvements: remove hardcoded vendor_id overrides (3001/3002/3003), add time-decay factor, incorporate behavioral signals (article finding, name change frequency)
-- API integrations — automated ingestion from vendor data APIs (not just CSV)
-- Audit trail dashboard — searchable log of all analyst actions
+- Live FinCEN HTTP client (stub ships; interface ready to be filled).
+- External SSO / SAML / OAuth.
+- Multi-tenancy.
+- Runtime LLM chat agents inside the app (dev-side `.claude/agents/` only).

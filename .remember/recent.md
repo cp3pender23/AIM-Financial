@@ -1,43 +1,39 @@
 # AIM — Recent Activity (7-day rolling)
 **Last updated:** 2026-04-15
 
-## 2026-04-15 — Full Agent Audit (All 10 agents)
+## 2026-04-15 — BSA/FinCEN port completed
 
-### Documentation
-- Created complete 19-file docs suite (docs/ + .claude/agents/)
-- Created memory-keeper agent and seeded .remember/
-- All docs updated: `wwwroot/index.html` → `Pages/Index.cshtml` (7 references across 5 files)
-- Created docs/agents/README.md index
+Major rewrite of AIM from vendor-risk-scoring to a BSA/FinCEN suspicious-activity reporting platform.
 
-### Architecture
-- Converted frontend from `wwwroot/index.html` to `Pages/Index.cshtml` (Razor Page)
-  - All Alpine.js `@click` → `@@click` (Razor escaping)
-  - CSS `@keyframes` → `@@keyframes`
-  - MapRazorPages() + MapFallbackToPage("/Index") added to Program.cs
+### Stack changes
+- Dapper + raw SQL → EF Core 10 + snake_case naming + Identity.
+- Two-schema (raw/master) → single `public` schema with `bsa_reports` + `audit_log`.
+- New DB: `aim_fincen` (owned by `aim_fincen_user`); vendor-era `aim` preserved with pg_dump backup.
 
-### Security
-- Removed hardcoded PostgreSQL password from IngestCsv/Program.cs → env var
-- Removed hardcoded MySQL + PostgreSQL passwords from MigrateData/Program.cs → env vars
-- appsettings.json password placeholder: REPLACE_WITH_ENV_VAR
-- .gitignore: added publish/, appsettings.Development.json, *.pfx, *.p12
+### New features shipped
+- ASP.NET Identity auth with Admin/Analyst/Viewer roles, 30-min sliding cookie, seed users.
+- Filing workflow state machine (Draft → PendingReview → Approved → Submitted → Acknowledged/Rejected).
+- FinCEN submission stub (`IFinCenClient` + `StubFinCenClient`) wired into DI.
+- Audit log capturing every mutation with before/after JSON.
+- CSV export of filtered grid, PDF export of single filing (QuestPDF, masked EIN/SSN).
+- Bulk CSV import UI (preview/commit) + CLI (`database/ImportBsa`).
+- Subject detail modal with 20 recent transactions, activity-over-time chart, related-subjects link analysis.
+- Two new `.claude/agents/` — `data-analyst` and `data-scientist`.
+- 13-agent invocation playbook in `memory/agent-playbook.md`.
 
-### Bug Fixes (from agent audit)
-- StateSales.cs: `"total_sales"` → `"TOTAL_SALES"` (consistency fix); frontend updated to match
-- Reports placeholder: duplicate style attribute bug fixed; now uses min-h-[calc(100vh-48px)] Tailwind class
-- _donut(src): now accepts filtered vendor array, computes per-tier unique vendor counts
-- Geographic view: .geo-active CSS class eliminates blank area below map
-- BPI card: "(global)" label + clarified subtitle
-- Price difference: Math.abs() used so negative price diff is also flagged red
-- _applyFilter(): now sets this.vendors = filtered before calling view/chart updates
-- IngestCsv: batch INSERT moved inside transaction (atomicity)
-- IngestCsv: row_count UPDATE moved before CommitAsync
+### Verification done
+- Build clean, 0 warnings, 0 errors.
+- `dotnet ef database update` applied migration.
+- 500 rows imported from `bsa_mock_data_500.csv`. Distribution TOP=18, HIGH=78, MODERATE=135, LOW=269.
+- Login → admin@aim.local, all analytics endpoints return real data.
+- Full filing workflow: Draft → PendingReview → Approved → Submitted tested end-to-end; FinCEN stub fired; audit log populated with one entry per transition; `fincen_filing_number` set on Submitted.
 
-### New Infrastructure
-- Migration 004: composite index, rating_score index, pg_trgm for ILIKE, score_category NOT NULL + CHECK, vendor_id DEFAULT 0
-- UseAuthorization() placeholder added to Program.cs
+### Recovery points
+- Git tag `aim-fincen-vendor-final`, branch `legacy/vendor-scoring`.
+- DB backup at `C:\temp\aim_vendor_backup.sql` (2.2 MB).
+- Vendor-era core memories archived to `.remember/archive-vendor-core-memories.md`.
 
-### In Progress / Not Yet Done
-- FR-13: Authentication — not started (CRITICAL for production)
-- FR-16: Automated tests — QA agent produced comprehensive test plan
-- Migration 004 needs to be run against the database
-- Git history contains old passwords — rotate database credentials
+### Remaining
+- CI/CD pipeline.
+- Automated tests (xUnit integration + Playwright E2E).
+- Live FinCEN HTTP client (swap the registered `IFinCenClient` implementation).

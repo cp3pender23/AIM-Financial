@@ -6,7 +6,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AIM.Web", "AIM.Web.csproj",
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "database", "database", "{E0096E63-5207-411F-2649-837654E3C58A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MigrateData", "database\MigrateData\MigrateData.csproj", "{3DEFD6C1-7D74-515C-E4B7-FD6866C6679D}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImportBsa", "database\ImportBsa\ImportBsa.csproj", "{A1B2C3D4-E5F6-4789-A012-3456789ABCDE}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -18,16 +18,16 @@ Global
 		{84C56950-15A1-BE96-EC37-48F768849C29}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{84C56950-15A1-BE96-EC37-48F768849C29}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{84C56950-15A1-BE96-EC37-48F768849C29}.Release|Any CPU.Build.0 = Release|Any CPU
-		{3DEFD6C1-7D74-515C-E4B7-FD6866C6679D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{3DEFD6C1-7D74-515C-E4B7-FD6866C6679D}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{3DEFD6C1-7D74-515C-E4B7-FD6866C6679D}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{3DEFD6C1-7D74-515C-E4B7-FD6866C6679D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A1B2C3D4-E5F6-4789-A012-3456789ABCDE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1B2C3D4-E5F6-4789-A012-3456789ABCDE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1B2C3D4-E5F6-4789-A012-3456789ABCDE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1B2C3D4-E5F6-4789-A012-3456789ABCDE}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
-		{3DEFD6C1-7D74-515C-E4B7-FD6866C6679D} = {E0096E63-5207-411F-2649-837654E3C58A}
+		{A1B2C3D4-E5F6-4789-A012-3456789ABCDE} = {E0096E63-5207-411F-2649-837654E3C58A}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {8EDC194D-7D4C-48BA-B09E-4699C22F287F}

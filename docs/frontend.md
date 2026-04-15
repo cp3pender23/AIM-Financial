@@ -1,281 +1,137 @@
 # AIM — Frontend Developer Guide
 
-## Architecture: Single-File SPA
+## Architecture: single-file SPA
 
-The entire frontend lives in `Pages/Index.cshtml`. There is no build step, no npm, no webpack, no component files. All libraries are loaded from CDN. The file is a Razor Page — Alpine.js event directives use `@@click` instead of `@click` to avoid Razor treating them as C# expressions.
+The entire dashboard frontend lives in `Pages/Index.cshtml`. There is no build step, no npm, no bundler. Libraries are loaded from CDN. The file is a Razor Page — Alpine.js event directives use `@@click` (double-`@`) to escape Razor.
 
-**Why**: Zero toolchain setup, simple deployment (just copy one file), works for the scale of an internal tool.
+**Why**: Zero toolchain, trivial deploy, fast iteration. Acceptable for the current scope.
 
-**Tradeoff**: All code in one file, no tree shaking, no TypeScript. Acceptable for the current scope.
-
----
+Sibling pages `Pages/Filing.cshtml` and `Pages/Import.cshtml` follow the same pattern (each self-contained).
 
 ## Libraries (CDN)
 
 | Library | Version | Purpose |
-|---------|---------|---------|
-| Tailwind CSS | CDN (latest) | Utility-first CSS, dark theme |
+|---|---|---|
+| Tailwind CSS | via CDN | Utility-first CSS, dark theme |
 | Alpine.js | 3.13.9 | Reactive component state |
-| AG Grid Community | 31.3.0 | Vendor intelligence data grid |
-| ApexCharts | 3.48.0 | KPI and distribution charts |
-| Leaflet | 1.9.4 | Geographic map |
+| AG Grid Community | 31.3.0 | BSA filings data grid |
+| ApexCharts | 3.48.0 | Risk donut, state bar, subject activity line |
+| Leaflet | 1.9.4 | (Geographic view — optional) |
 | Lucide | 0.344.0 | Icons |
-| Inter font | Google Fonts | Typography |
+| Inter | Google Fonts | Typography |
 
----
+## Alpine component `aim()`
 
-## Alpine.js Component Structure
+Body registers the app: `<body>` wraps everything and `<div x-data="aim()" x-init="init()">` is the SPA root.
 
-The body tag registers the app: `<body x-data="aim()">`. The `aim()` function returns all state and methods.
-
-### State Properties
+### State model
 
 ```js
-// Loading
-loading: true               // shows skeleton while fetching
-
-// Navigation
-currentView: 'overview'    // overview | risk | products | geographic | reports
-
-// Vendor data
-allVendors: []             // full unfiltered list from API — set once, never modified
-vendors: []                // current view (= allVendors when no filter)
-
-// Filtering
-activeRisks: []            // e.g. ['TOP', 'HIGH'] — empty = All
-searchQuery: ''            // text in search box (250ms debounce)
-
-// Grid
-rowCount: 0                // displayed row count in AG Grid
-selected: []               // selected rows for bulk actions
-
-// Detail Drawer
-dv: null                   // current vendor record (null = drawer closed)
-dtab: 'overview'           // overview | intelligence | actions
-
-// Geographic
-geoState: null             // selected state name
-geoCity: null              // selected city name
-geoItems: []               // list items for side panel
-geoLoading: false          // geocoding in progress
-geoStatus: ''              // geocoding status message
-
-// Computed (global, unfiltered — set once on init)
-kpi: { total, topCount, highCount, moderateCount, lowCount }
-
-// Computed (filtered — recomputed on each filter change)
-view: { total, highRisk, products, unverified }
-```
-
-### The `kpi` vs `view` Split
-
-This distinction is important:
-
-**`kpi`** — global sidebar counts. Set once on initial load from the full unfiltered vendor list. Used for:
-- Sidebar tier counts (All: 2573, TOP: 86, HIGH: 842...)
-- Brand Protection Index calculation
-- Sparkline chart seed values
-
-**`view`** — KPI card values. Recomputed on every filter change from the current filtered vendors. Shows unique entity counts:
-- `view.total` = unique vendor names in current filter
-- `view.products` = unique product names
-- `view.highRisk` = unique vendor names at TOP or HIGH
-- `view.unverified` = unique vendor names with VERIFIED_COMPANY=false
-
----
-
-## The Critical `let _g` Pattern
-
-AG Grid's API instance is stored **outside** the Alpine component:
-
-```js
-let _g = null;   // ← OUTSIDE aim() function, at module level
-
-function aim() {
-  return {
-    _initGrid() {
-      _g = agGrid.createGrid(document.getElementById('vendor-grid'), { ... });
-    },
-    _applyFilter() {
-      _g.setGridOption('rowData', filtered);  // ← uses outer _g
-    }
-  }
+{
+  view: 'overview',          // active sidebar view
+  activeRisk: '',            // selected risk tier filter, '' = All
+  search: '',                // free-text search
+  rows: [],                  // grid data from /api/records
+  kpi: {                     // from /api/summary
+    total, byRisk: { TOP, HIGH, MODERATE, LOW },
+    totalAmount, amendmentCount
+  },
+  selected: null,            // filing opened in the detail modal
+  subjectDetails: null,      // from /api/subject-details
+  relatedSubjects: [],       // from /api/bsa-reports/subjects/{linkId}
+  drawerOpen: false,
+  tab: 'overview',
+  toasts: []
 }
 ```
 
-**Why not inside Alpine state?** Alpine wraps all state in a JavaScript `Proxy`. AG Grid's internal methods use `this` bindings that break when the instance is accessed through a Proxy. Storing `_g` outside avoids this entirely.
-
-**Never move `_g` inside the `aim()` return object.**
-
----
-
-## Multi-Select Risk Tier Filter
-
-Filtering is entirely client-side:
+## The `let _g` hoist rule (critical)
 
 ```js
-toggleRisk(level) {
-  if (level === '') {
-    this.activeRisks = [];          // 'All' clears selection
-  } else {
-    const idx = this.activeRisks.indexOf(level);
-    this.activeRisks = idx === -1
-      ? [...this.activeRisks, level]                     // add
-      : this.activeRisks.filter(r => r !== level);       // remove
-  }
-  this._applyFilter();
-},
-
-_applyFilter() {
-  const filtered = this.activeRisks.length === 0
-    ? this.allVendors
-    : this.allVendors.filter(v => this.activeRisks.includes(v.SCORE_CATEGORY));
-
-  this._applyView(filtered);      // update KPI cards
-  this._donut();                  // update donut chart
-  this._bars(this._stateSalesFromVendors(filtered));  // update bar chart
-
-  _g.setGridOption('rowData', filtered);
-  this.$nextTick(() => { this.rowCount = _g.getDisplayedRowCount(); });
-}
+// Module-level, OUTSIDE aim()
+let _g = null;
+let _chartRisk = null, _chartState = null, _chartSubject = null, _map = null;
 ```
 
-**Key rule**: Array state must be reassigned, not mutated. Alpine detects changes via property assignment, not array mutation.
+Alpine wraps everything returned from `aim()` in a JavaScript Proxy. AG Grid's internal `this` bindings break when the grid instance is behind a Proxy. Keeping these outside avoids the issue entirely. **Never move them into the Alpine return object.**
 
----
+## Auth and fetch
 
-## Chart Update Pattern
+All dashboard API calls go through plain `fetch()`. The browser carries the `.AspNetCore.Identity.Application` cookie automatically. If the cookie has expired (30-min sliding idle), the fetch receives a 302 redirect to `/Identity/Account/Login` and the browser follows it — full-page navigation signals the user to re-auth.
 
-All charts use the `el._c` pattern to update without re-rendering from scratch:
+No anti-forgery tokens are required for `/api/*` — the API group in `Program.cs` calls `.DisableAntiforgery()` and relies on cookie + SameSite=Lax.
+
+## Color system
+
+**Background palette** (dark to less dark):
+- `bg-[#070b16]` — page background
+- `bg-slate-900` — cards, sidebar, drawer
+- `bg-slate-800` — inputs, hover, active
+- `bg-slate-700` — borders, dividers
+
+**Risk-tier badges** (class `rb rb-TOP` etc.):
+| Tier | Color |
+|---|---|
+| TOP | red (`#f87171` text, `rgba(239,68,68,.15)` bg) |
+| HIGH | orange (`#fb923c` text) |
+| MODERATE | amber (`#fbbf24` text) |
+| LOW | green (`#4ade80` text) |
+
+**Status badges** (class `sb sb-Draft` etc.):
+| Status | Color |
+|---|---|
+| Draft | slate |
+| PendingReview | amber |
+| Approved | sky |
+| Submitted | indigo |
+| Acknowledged | emerald |
+| Rejected | red |
+
+**Chart colors**: TOP=`#ef4444`, HIGH=`#f97316`, MODERATE=`#eab308`, LOW=`#22c55e`.
+
+## ApexCharts update pattern
+
+Store each chart instance in a module-level `let _chartX = null`. On every re-render, prefer `updateOptions` over destroying and recreating. Wrap initial renders in `setTimeout(fn, 50)` when the container height depends on layout paint.
 
 ```js
-const el = document.getElementById('chart-donut');
-if (el._c) {
-  el._c.updateOptions(opts);     // ← update existing chart
-} else {
-  setTimeout(() => {             // ← 50ms delay prevents height=0 race condition
-    el._c = new ApexCharts(el, opts);
-    el._c.render();
-  }, 50);
-}
+if (_chartRisk) _chartRisk.updateOptions(opts, true, true);
+else { _chartRisk = new ApexCharts(document.getElementById('chart-risk'), opts); _chartRisk.render(); }
 ```
 
-The 50ms delay on first render lets the browser complete its paint cycle and assign the container's computed height before Leaflet/ApexCharts read it.
-
-**Charts and their element IDs:**
-
-| Chart | Element ID | Function | Triggers |
-|-------|-----------|----------|---------|
-| Donut (risk distribution) | `chart-donut` | `_donut()` | `_load()`, `_applyFilter()` |
-| Bar (state sales) | `chart-states` | `_bars(states)` | `_load()`, `_applyFilter()` |
-| Sparkline — total | `sp-total` | `_sparks()` | `_load()` only |
-| Sparkline — high risk | `sp-high` | `_sparks()` | `_load()` only |
-| Sparkline — products | `sp-products` | `_sparks()` | `_load()` only |
-| Sparkline — unverified | `sp-unverified` | `_sparks()` | `_load()` only |
-
----
-
-## Leaflet Map Patterns
-
-The geographic view has specific timing requirements:
+## AG Grid
 
 ```js
-async _geoInit() {
-  await this.$nextTick();
-  await new Promise(r => setTimeout(r, 50));  // let browser paint the container at full height
-  if (!_map) {
-    _map = L.map('geo-map', { zoomControl: false, ... });
-    // ...
-  }
-  _map.invalidateSize();  // always call after container becomes visible
-}
-```
-
-**Geocoding**: Cities are geocoded via Nominatim (OpenStreetMap) with 1.1-second delays between requests to respect the rate limit. Coordinates are cached in `sessionStorage` under keys like `geo_Dallas,TX`. State coordinates are hardcoded in `STATE_COORDS` and never geocoded.
-
-**Marker creation**: `_geoIcon(count, color, size)` generates a Leaflet `DivIcon` — a circular SVG bubble with the count label inside.
-
----
-
-## LOCATIONS_CSV Parsing
-
-Vendor+product records may have multiple locations stored in `LOCATIONS_CSV`:
-```
-"TX~Dallas|TX~Houston|FL~Miami"
-```
-
-Frontend parsing pattern:
-```js
-// Get all states for a vendor:
-const states = [...new Set(
-  (v.LOCATIONS_CSV || '').split('|').filter(Boolean)
-    .map(l => l.split('~')[0]?.trim().toUpperCase()).filter(Boolean)
-)];
-
-// Get cities in a specific state:
-const citiesInState = (v.LOCATIONS_CSV || '').split('|').filter(Boolean)
-  .map(l => { const [s,c] = l.split('~'); return s?.trim().toUpperCase() === targetState ? c?.trim() : null; })
-  .filter(Boolean);
-
-// Build a location string like "TX: Dallas, Houston • FL: Miami":
-const byState = {};
-(v.LOCATIONS_CSV || '').split('|').filter(Boolean).forEach(l => {
-  const [s, c] = l.split('~');
-  if (!s || !c) return;
-  if (!byState[s]) byState[s] = [];
-  byState[s].push(c);
+// Create once
+_g = agGrid.createGrid(document.getElementById('grid'), {
+  columnDefs: [...],
+  rowData: this.rows,
+  defaultColDef: { sortable: true, resizable: true, filter: true },
+  onRowClicked: e => this.openRow(e.data),
 });
-const locationStr = Object.entries(byState).sort(([a],[b]) => a.localeCompare(b))
-  .map(([s, cs]) => `${s}: ${cs.sort().join(', ')}`).join(' • ');
+
+// Update data
+_g.setGridOption('rowData', this.rows);
 ```
 
----
+**CSV export** — do NOT use `_g.exportDataAsCsv()`. Use the server endpoint `/api/bsa-reports/export.csv?...` so the export respects filters applied on the server side.
 
-## Adding a New View
+## Leaflet map
 
-1. Add a nav item in the sidebar `<aside>`:
-```html
-<div @click="navTo('myview')" :class="currentView==='myview' ? 'active classes' : 'inactive classes'" class="nav-btn">
-  <i data-lucide="icon-name" class="w-4 h-4 flex-shrink-0"></i><span>My View</span>
-</div>
-```
+If enabled, init after a 50 ms paint delay and call `_map.invalidateSize()` when the geographic view becomes visible. State coordinates should be precomputed (no geocoding per session at dashboard scale).
 
-2. Add the content section with `x-show`:
-```html
-<div x-show="currentView === 'myview'" class="...">
-  <!-- view content -->
-</div>
-```
+## Detail modal (drawer)
 
-3. Handle in `navTo(view)`:
-```js
-if (view === 'myview') { this.toggleRisk(''); /* reset filters */ }
-```
+Fixed right panel `#drawer`, 520px wide. Opens on grid row click. Four tabs:
 
-4. If your view needs data on first show (lazy load):
-```js
-if (view === 'myview') { this.$nextTick(() => this._loadMyViewData()); }
-```
+- **overview** — field grid + Download PDF button + 31 USC 5318(g)(2) banner
+- **transactions** — 20 recent filings for the subject + activity-over-time line chart + Related Subjects list (from `buildLinkId` hash)
+- **institution** — Institution Type / State / Regulator / FinCEN filing number
+- **transitions** — role-gated legal next states
 
----
+`openRow(r)` sets `selected`, loads `/api/subject-details`, then `/api/bsa-reports/subjects/{linkId}`. `closeDrawer()` toggles `drawerOpen` and clears `selected`.
 
-## Dark Theme Color Reference
+## Adding a new view
 
-| Use | Tailwind Class |
-|-----|---------------|
-| Page background | `bg-[#070b16]` |
-| Card / sidebar / drawer | `bg-slate-900` |
-| Input / hover state | `bg-slate-800` |
-| Borders | `border-slate-800` |
-| Primary text | `text-slate-200` or `text-white` |
-| Secondary text | `text-slate-400` or `text-slate-500` |
-| Muted text | `text-slate-600` |
-
-**Risk tier colors** — use consistently:
-
-| Tier | Background | Text | Dot |
-|------|-----------|------|-----|
-| TOP | `bg-red-950/60` | `text-red-300` | `bg-red-500` |
-| HIGH | `bg-orange-950/60` | `text-orange-300` | `bg-orange-500` |
-| MODERATE | `bg-amber-950/60` | `text-amber-300` | `bg-amber-500` |
-| LOW | `bg-green-950/60` | `text-green-300` | `bg-green-500` |
+1. Add a `{ id, label }` to the `views` array.
+2. Add `<div x-show="view==='myview'"> ... </div>` in `#main`.
+3. Add any server calls to `reload()` or lazily in `setView()`.

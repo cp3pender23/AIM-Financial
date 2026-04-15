@@ -1,206 +1,164 @@
-# AIM — Core Memories
+# AIM — Core Memories (post-port)
 
-Permanent facts, hard-won lessons, and architectural decisions that must survive across conversations.
-
----
-
-## BaseSelect drives from master.vendor_scores — 2026-04-14
-
-**Decision**: `VendorService.BaseSelect` drives from `master.vendor_scores`, joining to `master.vendor_details`. Not the other way around.
-
-**Why**: `master.vendor_details` has 3,133 raw rows. `master.vendor_scores` has a UNIQUE constraint on `(vendor_name, product_name)` = 2,573 unique pairs. Driving from vendor_details returned 3,133 records in the grid instead of the correct 2,573.
-
-**Impact**: If you ever change the driving table back to vendor_details, the grid will show duplicate vendor rows and the record count will be wrong.
+Permanent facts, hard-won lessons, and architectural decisions that must survive across conversations. The vendor-era memories were archived to `.remember/archive-vendor-core-memories.md` on 2026-04-15 when AIM was ported to a BSA/FinCEN platform.
 
 ---
 
-## HAVING not WHERE for risk tier filters — 2026-04-14
+## Domain pivot — 2026-04-15
 
-**Decision**: All risk tier filters in VendorService append as `HAVING vs.score_category = @RiskLevel`, not `WHERE`.
+**Decision**: AIM was rewritten from a vendor-risk-scoring application to a BSA (Bank Secrecy Act) / FinCEN suspicious-activity reporting and analytics platform. The UI chrome (Alpine.js, Tailwind, AG Grid, ApexCharts, Leaflet, dark theme) was preserved; everything else was rewritten.
 
-**Why**: BaseSelect ends with `GROUP BY vs.vendor_name, vs.product_name, ...`. In SQL, WHERE must precede GROUP BY. A WHERE clause appended after GROUP BY is a syntax error. HAVING applies after aggregation, which is what we want.
+**Recovery points**:
+- Git tag `aim-fincen-vendor-final`
+- Branch `legacy/vendor-scoring`
+- Vendor-era DB backup at `C:\temp\aim_vendor_backup.sql` (2.2 MB from the old `aim` database)
+- Vendor-era core memories at `.remember/archive-vendor-core-memories.md`
 
-**Impact**: Every new filter added to any query that uses BaseSelect must use HAVING, not WHERE.
-
----
-
-## let _g lives outside aim() — 2026-04-14
-
-**Decision**: `let _g = null` is declared at module level, outside the `aim()` Alpine component function.
-
-**Why**: Alpine.js wraps all state returned from `aim()` in a JavaScript Proxy. AG Grid's internal methods use `this` bindings that break when the grid instance is accessed through a Proxy. Storing `_g` outside avoids this entirely.
-
-**Impact**: Never move `_g` inside the `aim()` return object. If you do, AG Grid methods like `setGridOption` and `getDisplayedRowCount` will throw runtime errors.
+**Impact**: Do not attempt to merge vendor and BSA schemas. They are different applications that happen to share UI chrome.
 
 ---
 
-## Three JSON field names preserve MySQL typos — 2026-04-14
+## Stack swap — 2026-04-15
 
-**Decision**: Three C# properties in `VendorDetail.cs` have `[JsonPropertyName]` attributes that use deliberately misspelled names.
-
-**Why**: The original MySQL database had these column name typos. The frontend JavaScript references these exact strings. Correcting the spellings would silently break all frontend field access.
-
-| C# Property | JSON Field Name |
-|-------------|----------------|
-| ProductCategory | `PRODUCT_GATEGORY` |
-| PriceDifference | `PRICE_DIFFERANCE` |
-| DifferentAddress | `DIFFRENT_ADDRESS` |
-
-**Impact**: Never "fix" these typos in VendorDetail.cs without doing a global find-replace of every reference in `wwwroot/index.html` first.
+- **Data layer**: Dapper + raw SQL + two-schema (raw/master) → **EF Core 10 + snake_case naming convention + single `public` schema**.
+- **ORM**: Dapper is gone. `Services/BsaReportService.cs` is EF Core LINQ end-to-end.
+- **Pattern gone**: `BaseSelect`, `HAVING vs WHERE`, `master.vendor_scores` driving table, `locations_csv`, `PRODUCT_GATEGORY`/`PRICE_DIFFERANCE`/`DIFFRENT_ADDRESS` typo preservation. All archived.
+- **Pattern new**: Every write goes through `BsaReportService` and writes an `AuditLogEntry` in the same transaction.
 
 ---
 
-## Client-side filtering — all vendors pre-loaded — 2026-04-14
+## `let _g` lives outside `aim()` Alpine component
 
-**Decision**: On app init, all 2,573 vendor+product records are fetched once into `allVendors`. Risk tier filtering is done entirely in JavaScript with no API calls.
+**Decision**: `let _g = null` is declared at module level in `Pages/Index.cshtml`, outside the `aim()` Alpine component function. Same for `_chartRisk`, `_chartState`, `_chartSubject`, `_map`.
 
-**Why**: Allows multi-select tier filtering (e.g., TOP + HIGH simultaneously) without requiring API support for multi-value filter params. Also makes filtering instantaneous.
+**Why**: Alpine.js wraps all state returned from `aim()` in a JavaScript Proxy. AG Grid's internal `this` bindings break when the grid instance is accessed through a Proxy. Storing `_g` outside avoids this entirely.
 
-**Key state**:
-- `allVendors` = full unfiltered list, set once on init, never modified
-- `vendors` = current filtered view (= allVendors when no filter active)
-- `activeRisks: []` = array of selected tiers; empty means "All"
-
-**Impact**: If the dataset grows very large (100k+ records), this pre-load strategy may need revisiting. For the current 2,573-record dataset it is fine.
+**Impact**: This is the one pattern that survived the domain pivot unchanged. Never move `_g` inside the `aim()` return object.
 
 ---
 
-## Chart update pattern — el._c — 2026-04-14
+## RiskLevel thresholds (Data Scientist owns)
 
-**Decision**: ApexCharts instances are stored on the DOM element as `el._c`. To update, call `el._c.updateOptions(opts)`. To create (first render), use `new ApexCharts` inside a `setTimeout(fn, 50)`.
+**Formula** (`BsaReport.DeriveRiskLevel`):
+- `amount_total >= 50000` → `TOP`
+- `amount_total >= 20000` → `HIGH`
+- `amount_total >= 5000` → `MODERATE`
+- else → `LOW`
 
-**Why**: The 50ms delay lets the browser complete its paint cycle and assign the container's computed height before ApexCharts reads it. Without it, charts render with height=0 on first load.
-
-**Charts and IDs**: donut=`chart-donut`, bars=`chart-states`, sparklines=`sp-total/sp-high/sp-products/sp-unverified`
-
----
-
-## kpi vs view — two separate state objects — 2026-04-14
-
-**Decision**: Two separate state objects track counts at different scopes.
-
-- `kpi` — global sidebar counts. Set **once** on init from the full unfiltered vendor list. Used for sidebar tier counts (All: 2573, TOP: 86...) and Brand Protection Index. Never recomputed.
-- `view` — KPI card values. Recomputed on every filter change from the currently filtered vendors. Uses `Set.size` for unique entity counts (not pair counts).
-
-**Why**: Sidebar counts should always show the full dataset totals. KPI cards should reflect what's currently filtered. Two objects, two lifecycles.
+**Impact**: Changing these requires a one-shot SQL backfill of all existing `bsa_reports.risk_level` values. The change also affects the donut chart, sidebar counts, and filter buckets.
 
 ---
 
-## Brand Protection Index formula — 2026-04-14
+## Zip3 derivation
 
-**Formula**: `Math.round(((kpi.moderateCount + kpi.lowCount) / kpi.total) * 100)`
+**Decision**: `BsaReport.DeriveZip3` strips non-digits from `subject_ein_ssn` and returns the first 3. Empty string if no digits exist.
 
-**Where**: Computed in `wwwroot/index.html`, not in the database or API.
+**Why**: `subject_ein_ssn` is PII and indexing it directly is a leak risk. `zip3` is a coarse bucket (first 3 of 9) used for geographic grouping and link analysis.
 
-**Target**: >70%. Current baseline with legacy dataset: ~64%.
-
----
-
-## Known critical gaps as of initial build — 2026-04-14
-
-These are not bugs — they are planned features not yet built:
-
-1. **FR-13 — No authentication**: All API endpoints at `localhost:5000/api/vendors` are completely open. Anyone who can reach the server can read all vendor data. CRITICAL before any production deployment.
-2. **FR-15 — Actions not persisted**: Flag, Watchlist, and Safe actions in the Detail Drawer show toast notifications but the actions are not saved to the database. There is no `master.vendor_actions` table.
-3. **FR-14 — Reports module placeholder**: The Reports nav item shows a "coming soon" toast. No backend exists.
-4. **Credentials in source control**: `appsettings.json` has the database password committed. Not a problem for local dev but must be fixed before production.
-5. **FR-16 — No tests**: Zero automated tests. Playwright for E2E and WebApplicationFactory for API integration tests are the recommended tools.
-6. **FR-17 — No CI/CD**: Manual `dotnet run` only.
+**Impact**: `zip3` is NOT a real postal zip. Never present it to users as a zip code.
 
 ---
 
-## LOCATIONS_CSV format — 2026-04-14
+## DateTime Kind trap (Postgres timestamptz)
 
-**Format**: Pipe-separated `STATE~CITY` pairs.
-Example: `TX~Dallas|TX~Houston|FL~Miami`
+**Decision**: All `DateTime` writes go through `BsaReportService.ToUtc(DateTime?)` which normalizes `Kind` to `Utc`.
 
-**Computed by**: `score.sql` using `STRING_AGG(DISTINCT state || '~' || city, '|')`
+**Why**: Npgsql maps `DateTime` to `timestamp with time zone` and rejects `DateTimeKind.Unspecified`. System.Text.Json deserializes dates as Unspecified. Without normalization, every POST `/api/bsa-reports` throws `ArgumentException` at `SaveChangesAsync`.
 
-**Parsed by frontend**: Split on `|`, then split each part on `~`. See `docs/frontend.md` for the full parsing patterns.
-
-**Frontend uses it for**: Location pills in the Detail Drawer, "(+N more)" in the grid, and attributing a vendor to all its states/cities in the Geographic map.
+**Impact**: When adding any new DateTime field or write path, pipe the value through `ToUtc(...)`.
 
 ---
 
-## StateSales.cs JSON key must match frontend — 2026-04-15
+## EF Core GroupBy + DTO constructor — projection trap
 
-**Decision**: `StateSales.cs` uses `[JsonPropertyName("TOTAL_SALES")]` (uppercase), consistent with all other models. The frontend `_bars()` and `_stateSalesFromVendors()` use `TOTAL_SALES` (uppercase) too.
+**Decision**: When aggregating, project to an anonymous type inside the query, then map to the DTO **in memory** with `.Select(...)` after `ToListAsync`. See `BsaReportService.GetFilingsByStateAsync`.
 
-**Why**: C# developer audit found `total_sales` (lowercase) was an inconsistency. Fixing it required updating both the model AND the frontend JS that reads the API response.
+**Why**: EF Core 10 cannot translate `.GroupBy(...).Select(g => new MyDto(g.Key, g.Count(), g.Sum(...)))` when `MyDto` has a constructor. It emits `The LINQ expression could not be translated`.
 
-**Impact**: If StateSales.cs or the frontend revert to mismatched casing, the Annual Sales by State bar chart will silently render empty.
-
----
-
-## Reports placeholder requires Tailwind class not inline style — 2026-04-15
-
-**Decision**: The Reports view outer div uses `class="... min-h-[calc(100vh-48px)]"` (Tailwind), NOT a second `style` attribute.
-
-**Why**: HTML allows only ONE `style` attribute per element. A second `style` attribute is silently ignored by the browser. The UI/UX agent caught this — a duplicate `style` attribute caused the min-height to never apply.
-
-**Impact**: Always use Tailwind utility classes for layout. If a height/min-height must be set on a Razor Page element, use Tailwind's arbitrary value syntax `min-h-[...]` NOT an inline style attribute.
+**Impact**: Every new aggregate endpoint must follow the same pattern.
 
 ---
 
-## IngestCsv and MigrateData credentials — env vars required — 2026-04-15
+## Filing workflow state machine
 
-**Decision**: Both `database/IngestCsv/Program.cs` and `database/MigrateData/Program.cs` now require either a third CLI argument OR the `AIM_PG_CONN` / `AIM_MYSQL_CONN` environment variables. No default connection string.
+**States** (stored as string in `bsa_reports.status`): `Draft`, `PendingReview`, `Approved`, `Submitted`, `Acknowledged`, `Rejected`.
 
-**Why**: Hardcoded plaintext passwords `REDACTED` (PostgreSQL) and `REDACTED` (MySQL) were committed to source control. Both are now in git history and should be treated as compromised. Rotate them.
+**Legal transitions** (enforced in `BsaReportService.LegalTransitions`):
+- `Draft → PendingReview` (Analyst)
+- `PendingReview → Approved | Rejected` (Admin)
+- `Approved → Submitted` (Admin; invokes `IFinCenClient.SubmitAsync`)
+- `Submitted → Acknowledged` (set by acknowledgement polling / webhook; stubbed today)
+- `Rejected → Draft` (Analyst can revise and resubmit)
+- `Acknowledged` is terminal
 
-**Impact**: Anyone running IngestCsv or MigrateData must set the env vars first. Update runbooks accordingly.
-
----
-
-## Migration 004 exists and should be run — 2026-04-15
-
-**File**: `database/migrations/004_indexes_and_constraints.sql`
-
-**What it adds**:
-- `idx_master_vd_vendor_product` — composite index on `(vendor_name, product_name)` for the primary JOIN
-- `idx_master_scores_rating` — descending index on `rating_score` matching ORDER BY
-- pg_trgm extension + GIN index on `product_name` for ILIKE substring search
-- `score_category NOT NULL DEFAULT 'LOW'` + CHECK constraint on master.vendor_scores
-- `vendor_id DEFAULT 0` on master.vendor_details
-
-**Why**: Database audit identified these as missing for the primary query patterns. Must be run before the dataset grows significantly.
+**Impact**: Add new transitions to the dictionary, not at call sites. Illegal transitions throw `InvalidOperationException` → 409 Conflict.
 
 ---
 
-## Agent execution order established — 2026-04-15
+## FinCEN client is a stub
 
-**Decision**: AIM agents run in this order, each wave in parallel:
-- Wave 1: business-analyst + database-administrator (establish foundation/contracts)
-- Wave 2: sql-developer + csharp-developer + dotnet-developer (code layer, bottom-up)
-- Wave 3: data-operations + security-reviewer + devops-engineer (cross-cutting)
-- Wave 4: qa-testing + ui-ux-developer (quality and validation)
-- Wave 5: memory-keeper (captures all findings)
+**Decision**: `Services/FinCen/StubFinCenClient.cs` is registered as `IFinCenClient` in `Program.cs`. It generates a GUID receipt and logs; it never hits a real FinCEN endpoint. `FinCen:Enabled=false` in `appsettings.json`.
 
-**Why**: This order minimizes dependencies between agents and allows maximum parallelism. All Wave 1-4 agents are dispatched simultaneously (they read static files and have no cross-dependencies). Memory-keeper runs last to capture consolidated findings.
+**Impact**: Swap to a live `FinCenClient` is one line in `Program.cs` + one new class. Do not ship the stub to production without changing that flag and wiring.
 
 ---
 
-## gitignore gaps fixed — 2026-04-15
+## PII — `subject_ein_ssn`
 
-`publish/` and `appsettings.Development.json` were NOT in `.gitignore`. Both are now added. Also added `*.pfx` and `*.p12`. 
+**Decision**: `subject_ein_ssn` is displayed masked (`***-**-1234`) in the UI and PDF. It is NOT indexed directly. Bucketed lookups use `zip3`.
 
-**Impact**: Before this fix, a developer running `dotnet publish` would have `publish/` staged for commit, which includes compiled DLLs and potentially baked-in config.
+**Open**: CSV export currently includes full `subject_ein_ssn`. The Viewer-role export should redact it — decision pending, tracked in the PRD "Open questions" section.
 
----
-
-## UseAuthorization() placeholder in Program.cs — 2026-04-15
-
-**Decision**: `app.UseAuthorization()` was added to Program.cs between `UseStaticFiles()` and `MapControllers()`, with a comment: `// no-op until FR-13 adds [Authorize]; slot reserved here`.
-
-**Why**: ASP.NET Core's middleware order is fixed at startup. If `UseAuthorization()` is ever needed (FR-13), it must be in the right position. Adding it now (as a no-op) ensures it's already in the right place when auth is implemented.
+**Impact**: Never log `subject_ein_ssn`. Any new feature that displays or exports it must be reviewed by the security-reviewer agent.
 
 ---
 
-## Known security gaps requiring immediate action — 2026-04-15
+## Seed users (dev only)
 
-Three passwords are in git history and must be rotated:
-1. PostgreSQL: `REDACTED` — in IngestCsv/Program.cs (before fix)
-2. MySQL: `REDACTED` — in MigrateData/Program.cs (before fix)
-3. Both were also in appsettings.json (replaced with REPLACE_WITH_ENV_VAR placeholder earlier)
+| Email | Password | Role |
+|---|---|---|
+| `admin@aim.local` | `Admin123!Seed` | Admin |
+| `analyst@aim.local` | `Analyst123!Seed` | Analyst |
+| `viewer@aim.local` | `Viewer123!Seed` | Viewer |
 
-All five API endpoints in VendorsController have NO authentication. Do not deploy to any network-accessible server until FR-13 is implemented.
+Seeded in `Program.cs:SeedRolesAndUsersAsync` on startup. Rotate or remove for production.
+
+---
+
+## Agent roster expanded to 13 — 2026-04-15
+
+**New agents**: `data-analyst` and `data-scientist` added under `.claude/agents/`.
+
+**Invocation order** (captured in `memory/agent-playbook.md` in the auto-memory system):
+
+1. `business-analyst` — Discovery
+2. `data-analyst` **(new)** — Dashboard / KPI / filter design
+3. `data-scientist` **(new)** — Risk formula, derivation, detection logic
+4. `database-administrator` — Schema, indexes, retention
+5. `sql-developer` — Raw SQL, performance, migrations
+6. `csharp-developer` — Entities, services, LINQ, workflow logic
+7. `dotnet-developer` — Program.cs, DI, middleware, endpoints
+8. `ui-ux-developer` — Razor Pages, Alpine, AG Grid, ApexCharts, Leaflet
+9. `security-reviewer` — PII, policies, auth, OWASP checks
+10. `qa-testing` — xUnit, Playwright, invariants
+11. `data-operations` — CSV ingest, batch rollback
+12. `devops-engineer` — CI/CD, deployment, env vars
+13. `memory-keeper` — Record decisions to `.remember/`
+
+**Impact**: When unsure which agent owns a task, consult the playbook. Discovery agents run first; memory-keeper runs last.
+
+---
+
+## Environment & credentials
+
+- **DB**: PostgreSQL 18, database `aim_fincen`, user `aim_fincen_user`. Credentials in `secrets/connections.env` (gitignored) and `dotnet user-secrets` (UserSecretsId `f3a3f2b7-7593-42d9-85fa-bd41fe1b4810`).
+- **Launch profile**: `Properties/launchSettings.json` sets `ASPNETCORE_ENVIRONMENT=Development` so user-secrets load. Always use `--launch-profile "AIM.Web"` in dev, or set the env var explicitly.
+- **App URL**: `http://localhost:5055` in dev.
+
+---
+
+## Seed CSV
+
+- `database/seed/bsa_mock_data_500.csv` (from AIM-Codex repo).
+- Known distribution: 500 rows, 91 unique subjects, TOP=18 / HIGH=78 / MODERATE=135 / LOW=269, $6,825,085.33 total, 25 amendments.
+- Use these numbers as integration-test anchors.

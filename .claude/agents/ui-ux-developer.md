@@ -25,15 +25,15 @@ The entire app state lives in the `aim()` function registered with `x-data="aim(
 
 ### State Model
 ```js
-kpi: { total, topCount, highCount, moderateCount, lowCount }
-  // Global sidebar counts — set ONCE on init from the full vendor list. Never changes during a session.
+kpi: { total, byRisk: { TOP, HIGH, MODERATE, LOW }, totalAmount, amendmentCount }
+  // KPI card values — loaded from /api/summary on init and after every filter change
 
-view: { total, highRisk, products, unverified }
-  // KPI card values — recomputed on every filter change from the filtered vendors array.
-
-allVendors: []   // Full unfiltered vendor list from API — never modified after load
-vendors: []      // Current filtered subset (= allVendors when no filter active)
-activeRisks: []  // Array of selected tiers e.g. ['TOP', 'HIGH'] — empty = All
+rows: []          // Current BSA filing rows shown in the AG Grid (from /api/records)
+activeRisk: ''    // Selected tier filter, empty = All
+search: ''        // Free-text search (subject name, BSA ID, form type)
+selected: null    // Single filing opened in the detail modal
+subjectDetails: null  // Aggregated detail for the modal's selected subject
+relatedSubjects: []   // Subjects sharing a buildLinkId hash with the selected filing
 ```
 
 ### The `let _g` Pattern (Critical)
@@ -85,18 +85,15 @@ Always use `setTimeout(..., 50)` for initial render to avoid height=0 layout rac
 ## AG Grid Integration
 
 ```js
-// Creating the grid (called once in _initGrid()):
-_g = agGrid.createGrid(document.getElementById('vendor-grid'), { columnDefs, rowData: [], ... });
+// Creating the grid (called once in buildGrid()):
+_g = agGrid.createGrid(document.getElementById('grid'), { columnDefs, rowData: [], ... });
 
 // Updating data:
-_g.setGridOption('rowData', vendors);
-_g.setGridOption('quickFilterText', this.searchQuery);
+_g.setGridOption('rowData', this.rows);
 
-// Reading state:
-this.rowCount = _g.getDisplayedRowCount();
-
-// Exporting:
-_g.exportDataAsCsv({ fileName: 'aim-YYYY-MM-DD.csv' });
+// CSV export is done server-side by hitting /api/bsa-reports/export.csv so the
+// export respects the current filter, including rows that aren't currently
+// in the grid's view because of pagination. Do not call _g.exportDataAsCsv().
 ```
 
 ## Leaflet Map Patterns
@@ -117,11 +114,12 @@ _g.exportDataAsCsv({ fileName: 'aim-YYYY-MM-DD.csv' });
 
 ## Detail Drawer
 
-The drawer is a fixed right panel (`#drawer`, 472px). It has:
-- Three tabs: overview, intelligence, actions — controlled by `dtab` state
-- `openDrawer(vendor)` sets `this.dv = vendor` and adds class `open`
-- `closeDrawer()` removes class `open`, clears `dv` after 300ms (CSS transition)
-- The backdrop (`#backdrop`) is also toggled by the same open/close pair
+The drawer is a fixed right panel (`#drawer`, 520px). It has:
+- Four tabs: overview, transactions, institution, transitions — controlled by `tab` state
+- `openRow(r)` sets `this.selected = r`, loads `/api/subject-details`, resolves related subjects via `buildLinkId`, then toggles `drawerOpen = true`
+- `closeDrawer()` toggles `drawerOpen = false` and clears `selected`
+- The backdrop (`#backdrop`) is also toggled by `drawerOpen`
+- The `transitions` tab lists role-gated legal next states (Draft → PendingReview → Approved → Submitted; Rejected path)
 
 ## What You Should Always Check
 

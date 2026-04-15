@@ -1,248 +1,130 @@
 # AIM — API Reference
 
 ## Base URL
+`http://localhost:5055` (dev). Production URL is deployment-defined.
 
-```
-http://localhost:5000/api/vendors
-```
+## Auth
 
-All endpoints return JSON with the envelope format:
-```json
-{ "items": [ ... ] }
-```
+All routes except `/healthz` and `/Identity/Account/*` require an authenticated session. Login via `POST /Identity/Account/Login` establishes a cookie (`.AspNetCore.Identity.Application`) that the browser sends automatically. API clients must maintain the cookie or be rewritten to a token scheme (out of scope for this release).
 
-> **Security Note**: All endpoints are currently unauthenticated. Anyone who can reach the server can read all data. Authentication (FR-13) is a planned feature.
+Role-gated endpoints return **403 Forbidden** to authenticated users lacking the policy.
+Unauthenticated requests to `/api/*` return **302** to the login page.
+Illegal state transitions return **409 Conflict**.
 
----
+Policies:
+- `CanCreateFiling` — Analyst or Admin
+- `CanApprove` — Admin
+- `CanSubmit` — Admin
+- `CanViewAudit` — Admin
+- `CanImportBulk` — Admin
+
+## Shared query parameters (filters)
+
+Every analytics endpoint accepts the following query parameters, applied via `BsaReportService.ApplyFilters`. All filters AND together.
+
+| Param | Type | Notes |
+|---|---|---|
+| `formType` | string | Exact match |
+| `regulator` | string | Exact match |
+| `institutionType` | string | Exact match |
+| `institutionState` | string | Exact match |
+| `subjectState` | string | Exact match |
+| `riskLevel` | `TOP`/`HIGH`/`MODERATE`/`LOW` | Exact match |
+| `transactionType` | string | Exact match |
+| `suspiciousActivityType` | string | Exact match |
+| `status` | `Draft`/`PendingReview`/`Approved`/`Submitted`/`Acknowledged`/`Rejected` | Exact match |
+| `amendment` | bool | `true`/`false` |
+| `dateFrom` / `dateTo` | ISO date | `filing_date` range |
+| `amountMin` / `amountMax` | decimal | `amount_total` range |
+| `search` | string | ILIKE on `subject_name`, `bsa_id`, `form_type` |
+| `limit` | int | For `/api/records` only, default 50, max 1000 |
 
 ## Endpoints
 
-### `GET /api/vendors`
+### Health
 
-Returns all vendor+product pairs, optionally filtered by risk tier.
+**GET /healthz** (anonymous) → `200 { status, ts }`
 
-**One row per unique (vendor_name, product_name) combination.** Detail fields (city, address, etc.) are aggregated across multiple raw records for the same pair.
+### Analytics
 
-**Query Parameters:**
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| riskLevel | string | No | Filter by risk tier: `TOP`, `HIGH`, `MODERATE`, `LOW`. Empty or omitted = all tiers. |
-
-**Example requests:**
-```bash
-# All vendors (unfiltered):
-curl "http://localhost:5000/api/vendors?riskLevel="
-
-# Only TOP risk vendors:
-curl "http://localhost:5000/api/vendors?riskLevel=TOP"
-
-# TOP and HIGH combined — make two requests and merge client-side
-# (multi-tier filtering is handled client-side in the frontend)
-```
-
-**Response: `VendorDetail[]`**
-
-See [Response Models](#response-models) below for the full field list.
-
----
-
-### `GET /api/vendors/by-vendor`
-
-Returns all vendor+product pairs for a specific vendor name (exact match).
-
-**Query Parameters:**
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| vendorName | string | Yes | Exact vendor name to look up |
-
-**Example:**
-```bash
-curl "http://localhost:5000/api/vendors/by-vendor?vendorName=Sears"
-```
-
-**Response: `VendorDetail[]`** — multiple rows if the vendor sells multiple products.
-
----
-
-### `GET /api/vendors/kpi`
-
-Returns vendor and product counts grouped by risk tier. Used for sidebar counts and KPI aggregation.
-
-**Query Parameters:**
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| riskLevel | string | No | Filter to a specific tier. Empty or omitted = all tiers. |
-
-**Example:**
-```bash
-curl "http://localhost:5000/api/vendors/kpi"
-```
-
-**Response: `VendorKpi[]`**
+**GET /api/summary** → `SummaryDto`
 ```json
-{
-  "items": [
-    { "SCORE_CATEGORY": "TOP",      "DISTINCT_VENDOR_COUNT": 86,   "DISTINCT_PRODUCT_COUNT": 23 },
-    { "SCORE_CATEGORY": "HIGH",     "DISTINCT_VENDOR_COUNT": 842,  "DISTINCT_PRODUCT_COUNT": 156 },
-    { "SCORE_CATEGORY": "MODERATE", "DISTINCT_VENDOR_COUNT": 1451, "DISTINCT_PRODUCT_COUNT": 203 },
-    { "SCORE_CATEGORY": "LOW",      "DISTINCT_VENDOR_COUNT": 194,  "DISTINCT_PRODUCT_COUNT": 47 }
-  ]
-}
+{ "totalReports": 500, "totalAmount": 6825085.33, "averageAmount": 13650.17,
+  "oldestFiling": "2025-01-16T00:00:00Z", "newestFiling": "2026-01-20T00:00:00Z",
+  "uniqueSubjects": 91, "amendmentCount": 25,
+  "byRiskLevel": {"TOP":18,"HIGH":78,"MODERATE":135,"LOW":269},
+  "byStatus": {"Acknowledged":500} }
 ```
 
----
-
-### `GET /api/vendors/kpi-by-product`
-
-Returns aggregated metrics for a product name search (case-insensitive, wildcard match).
-
-**Query Parameters:**
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| productName | string | Yes | Product name search term (ILIKE `%term%`) |
-
-**Example:**
-```bash
-curl "http://localhost:5000/api/vendors/kpi-by-product?productName=glove"
-```
-
-**Response: `ProductKpi[]`**
+**GET /api/risk-amounts** → `RiskAmountDto[]` (one row per tier, ordered TOP/HIGH/MODERATE/LOW)
 ```json
-{
-  "items": [
-    {
-      "VENDORS": 12,
-      "PRODUCTS": 3,
-      "ANNUAL_SALES": 1500000.00,
-      "SCORE_CATEGORY": "HIGH",
-      "CATEGORY_COUNT": 8
-    }
-  ]
-}
+[{ "riskLevel":"TOP", "total":1623687.62, "count":18 }, ...]
 ```
 
----
-
-### `GET /api/vendors/state-sales`
-
-Returns total annual sales aggregated by state.
-
-**Query Parameters:**
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| riskLevel | string | No | Filter to vendors in a specific risk tier. Empty or omitted = all tiers. |
-
-**Example:**
-```bash
-# All states:
-curl "http://localhost:5000/api/vendors/state-sales"
-
-# Only states with TOP-tier vendors:
-curl "http://localhost:5000/api/vendors/state-sales?riskLevel=TOP"
-```
-
-**Response: `StateSales[]`**
+**GET /api/subject-rankings** → top 50 subjects by filing count
 ```json
-{
-  "items": [
-    { "STATE": "TX", "total_sales": 45200000.00 },
-    { "STATE": "CA", "total_sales": 38700000.00 },
-    ...
-  ]
-}
+[{ "subjectName":"HUDSON/WILLIAM/A", "count":18, "total":46756.57, "linkId":"1867c3" }, ...]
 ```
 
----
-
-## Response Models
-
-### VendorDetail
-
-The primary response model. Represents one unique (vendor_name, product_name) combination with aggregated fields.
-
-> **Note**: Field names preserve the original MySQL typos (`PRODUCT_GATEGORY`, `PRICE_DIFFERANCE`, `DIFFRENT_ADDRESS`). Do not "fix" these — the frontend JS references them by exact name.
-
-| JSON Field | Type | Description |
-|------------|------|-------------|
-| VENDOR_ID | int | Aggregated MIN(vendor_id) from raw records |
-| VENDOR_NAME | string | Vendor company name |
-| PRODUCT_NAME | string | Product being sold |
-| STREET_NAME | string | MIN(street_name) — primary location street |
-| CITY | string | MIN(city) — primary location city |
-| STATE | string | MIN(state) — primary location state |
-| ZIP_CODE | string | MIN(zip_code) |
-| SELLER_FIRST_NAME | string | MIN(seller_first_name) |
-| SELLER_LAST_NAME | string | MIN(seller_last_name) |
-| SELLER_PHONE | string? | MIN(seller_phone) |
-| SELLER_EMAIL | string? | MIN(seller_email) |
-| SELLER_URL | string? | MIN(seller_url) |
-| SELLER_NAME_CHANGE | bool | BOOL_OR — true if any record shows name change |
-| ARTICLE_FINDING | bool | BOOL_OR — true if any record has article finding |
-| ARTICLE_URL | string? | URL of article (when article_finding is true) |
-| **PRODUCT_GATEGORY** | string? | Product category (intentional typo) |
-| ANNUAL_SALES | decimal | SUM(annual_sales) across all locations |
-| VERIFIED_COMPANY | bool | BOOL_AND — true only if ALL records are verified |
-| **PRICE_DIFFERANCE** | decimal | AVG(price_difference) (intentional typo) |
-| PRODUCT_PRICE | decimal | AVG(product_price) |
-| **DIFFRENT_ADDRESS** | bool | BOOL_OR(different_address) (intentional typo) |
-| WEIGHT | decimal | AVG(weight) |
-| LOCATIONS_CSV | string | Pipe-separated STATE~CITY pairs, e.g. `TX~Dallas\|TX~Houston\|FL~Miami` |
-| LOCATION_COUNT | int | Count of distinct locations |
-| RATING_SCORE | int | Row count or 100 (TOP override) |
-| SCORE_CATEGORY | string? | TOP / HIGH / MODERATE / LOW |
-| PRODUCT_DIVERSITY_SCORE | int | COUNT(DISTINCT product_name) for this vendor |
-| VERIFIED_COMPANY_SCORE | int | 10 if any record unverified, else 0 |
-| TOTAL_SCORE | int | product_diversity_score + verified_company_score |
-
-### VendorKpi
-
-| JSON Field | Type | Description |
-|------------|------|-------------|
-| SCORE_CATEGORY | string? | TOP / HIGH / MODERATE / LOW |
-| DISTINCT_VENDOR_COUNT | int | Count of distinct vendor IDs in this category |
-| DISTINCT_PRODUCT_COUNT | int | Count of distinct product names |
-
-### ProductKpi
-
-| JSON Field | Type | Description |
-|------------|------|-------------|
-| VENDORS | int | Distinct vendor count |
-| PRODUCTS | int | Distinct product count |
-| ANNUAL_SALES | decimal | Total annual sales |
-| SCORE_CATEGORY | string? | Risk tier |
-| CATEGORY_COUNT | int | Vendor count in this category |
-
-### StateSales
-
-| JSON Field | Type | Description |
-|------------|------|-------------|
-| STATE | string | Two-letter state code |
-| total_sales | decimal | Sum of annual_sales for all vendors in this state |
-
----
-
-## Technical Notes
-
-### HAVING vs WHERE for riskLevel filtering
-
-The `riskLevel` filter uses `HAVING` (not `WHERE`) because the API's `BaseSelect` query ends with a `GROUP BY` clause. A filter on `score_category` must follow the GROUP BY, which in SQL requires HAVING, not WHERE.
-
-```sql
--- The BaseSelect ends with:
-GROUP BY vs.vendor_name, vs.product_name, vs.rating_score, vs.score_category, ...
-
--- Filter is appended as HAVING:
-HAVING vs.score_category = @RiskLevel ORDER BY rating_score DESC
-
--- NOT as WHERE (would be invalid SQL — WHERE must precede GROUP BY):
-WHERE vs.score_category = @RiskLevel  -- ← invalid here
+**GET /api/filters** → distinct values for each filter dropdown
+```json
+{ "formTypes":["BSAR"], "subjectStates":["AK","AL",...], "institutionStates":[...],
+  "institutionTypes":[...], "regulators":[...], "riskLevels":[...],
+  "transactionTypes":[...], "suspiciousActivityTypes":[...], "statuses":[...] }
 ```
 
-### Why one row per vendor+product
+**GET /api/subject-details?subject={name}** → `SubjectDetailsDto` (summary + 20 recent transactions for that subject). **404** if subject not found.
 
-The database has 3,133 raw records for ~2,573 unique (vendor_name, product_name) pairs. Without grouping, each API call would return 3,133 rows, with duplicate vendors appearing multiple times (once per location). Grouping ensures each vendor+product appears exactly once in the API response, with aggregated fields representing all its locations.
+**GET /api/records** → 50 most recent filings (respects filter params; `limit` up to 1000).
+
+**GET /api/filings-by-state** → `ByStateDto[]` grouped by `institutionState`, ordered by count desc.
+
+### Filing CRUD
+
+**GET /api/bsa-reports/{id}** → `BsaReport` or **404**.
+
+**GET /api/bsa-reports/queue?status={status}** → up to 500 rows at the given status, ordered by `updatedAt` desc.
+
+**POST /api/bsa-reports** (CanCreateFiling) — create Draft from `CreateBsaReportDto`. Returns **201** with `Location` header and the created row.
+```json
+{ "formType":"BSAR", "bsaId":"TEST-2026-0001", "subjectName":"...", "subjectState":"TX",
+  "subjectDob":"1980-01-01", "subjectEinSsn":"123-45-6789", "amountTotal":75000,
+  "suspiciousActivityType":"Structuring", "transactionType":"Wire",
+  "transactionDate":"2026-04-14T00:00:00Z", "institutionType":"Bank",
+  "institutionState":"TX", "regulator":"OCC" }
+```
+
+**PATCH /api/bsa-reports/{id}** (CanCreateFiling) — update Draft or Rejected owned by caller (Analyst) or any (Admin). **409** if status is not Draft/Rejected. **403** if Analyst trying to edit another analyst's draft.
+
+**POST /api/bsa-reports/{id}/transition** — body `{ target, reason? }`. Role-gated per transition (Draft→PendingReview is Analyst; PendingReview→Approved/Rejected is Admin; Approved→Submitted is Admin and invokes the FinCEN stub).
+
+**GET /api/bsa-reports/subjects/{linkId}** — all filings sharing the 6-char `buildLinkId` hash (i.e., same subject by EIN/SSN+DOB).
+
+### Audit
+
+**GET /api/audit?entityId={id}** (CanViewAudit) → up to 500 recent audit entries. Empty `entityId` returns the global journal.
+
+### Export
+
+**GET /api/bsa-reports/export.csv** — streaming CSV of the filtered grid. All filter params apply.
+
+**GET /api/bsa-reports/{id}/export.pdf** — QuestPDF single-page rendering of one filing. EIN/SSN is masked. Includes confidentiality footer.
+
+### Bulk import (Admin only)
+
+**POST /api/bsa-reports/import/preview** — multipart file upload. Returns `ImportPreviewResultDto` with first 20 rows, per-row errors, total counts. Caches valid rows for 15 minutes with an `uploadId`.
+
+**POST /api/bsa-reports/import/commit?uploadId={id}** — persists cached rows in a single transaction tagged with a `BatchId` GUID. Writes one `ImportBatch` audit entry.
+
+## Response codes
+
+| Code | Meaning |
+|---|---|
+| 200 | OK |
+| 201 | Created (filing Draft) |
+| 302 | Unauthenticated — redirect to login |
+| 400 | Malformed request |
+| 403 | Authenticated but lacks role/policy |
+| 404 | Not found |
+| 409 | Illegal state transition or rule violation |
+| 500 | Server error (should never happen; file an issue) |

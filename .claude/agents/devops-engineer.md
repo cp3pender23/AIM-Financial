@@ -23,8 +23,11 @@ dotnet build AIM.Web.csproj --configuration Release
 # Publish (create deployable output):
 dotnet publish AIM.Web.csproj --configuration Release --output ./publish
 
-# Run IngestCsv tool:
-dotnet run --project database/IngestCsv/IngestCsv.csproj -- <source> <file.csv>
+# Run ImportBsa tool:
+dotnet run --project database/ImportBsa -- --csv database/seed/bsa_mock_data_500.csv
+
+# Apply EF Core migrations:
+dotnet ef database update --project AIM.Web.csproj
 ```
 
 The published output in `./publish/` contains:
