@@ -111,6 +111,12 @@ api.MapGet("/records", async (HttpRequest req, IBsaReportService svc, Cancellati
 api.MapGet("/filings-by-state", async (HttpRequest req, IBsaReportService svc, CancellationToken ct) =>
     Results.Ok(await svc.GetFilingsByStateAsync(req.Query, ct)));
 
+api.MapGet("/entities", async (HttpRequest req, IBsaReportService svc, CancellationToken ct) =>
+    Results.Ok(await svc.GetEntitiesAsync(req.Query, ct)));
+
+api.MapGet("/entity-summary", async (HttpRequest req, IBsaReportService svc, CancellationToken ct) =>
+    Results.Ok(await svc.GetEntitySummaryAsync(req.Query, ct)));
+
 api.MapGet("/bsa-reports/{id:long}", async (long id, IBsaReportService svc, CancellationToken ct) =>
     await svc.GetByIdAsync(id, ct) is { } r ? Results.Ok(r) : Results.NotFound());
 
