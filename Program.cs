@@ -7,6 +7,10 @@ using AIM.Web.Services.Import;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
+// Npgsql 6+ rejects DateTime with Kind=Unspecified for timestamptz columns.
+// Enable legacy behavior so Unspecified is treated as UTC — matches our CSV seed data.
+AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+
 var builder = WebApplication.CreateBuilder(args);
 
 var cs = builder.Configuration.GetConnectionString("DefaultConnection")

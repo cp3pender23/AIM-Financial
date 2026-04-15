@@ -44,7 +44,7 @@ public class BsaReportService(AimDbContext db, IAuditLogger audit, IFinCenClient
     public IQueryable<BsaReport> ApplyFilters(IQueryable<BsaReport> q, IQueryCollection qs)
     {
         string? S(string k) => qs.TryGetValue(k, out var v) ? v.ToString() : null;
-        DateTime? D(string k) => DateTime.TryParse(S(k), out var d) ? d : null;
+        DateTime? D(string k) => DateTime.TryParse(S(k), out var d) ? ToUtc(d) : null;
         decimal? M(string k) => decimal.TryParse(S(k), out var m) ? m : null;
 
         if (S("formType") is { Length: > 0 } ft) q = q.Where(x => x.FormType == ft);
