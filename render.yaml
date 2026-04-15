@@ -10,6 +10,12 @@ services:
     envVars:
       - key: ASPNETCORE_ENVIRONMENT
         value: Production
+      - key: DOTNET_GCServer
+        value: "0"
+      - key: DOTNET_gcConcurrent
+        value: "0"
+      - key: DOTNET_TieredPGO
+        value: "0"
       - key: ConnectionStrings__DefaultConnection
         sync: false
       - key: Seed__ColinPassword

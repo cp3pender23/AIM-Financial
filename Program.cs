@@ -13,7 +13,11 @@ var cs = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection missing");
 
 builder.Services.AddDbContext<AimDbContext>(o =>
-    o.UseNpgsql(cs).UseSnakeCaseNamingConvention());
+    o.UseNpgsql(cs, npg =>
+    {
+        npg.CommandTimeout(60);
+        npg.EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(5), errorCodesToAdd: null);
+    }).UseSnakeCaseNamingConvention());
 
 builder.Services.AddIdentity<AimUser, IdentityRole>(o =>
     {
