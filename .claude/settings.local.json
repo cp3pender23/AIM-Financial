@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git clone *)",
+      "Bash(dotnet --version)",
+      "Bash(dotnet --list-sdks)",
+      "Bash(cp -r c:/Users/colin/Projects/AIM/assets/css c:/Users/colin/Projects/AIM/wwwroot/assets/css)",
+      "Bash(cp -r \"c:/Users/colin/Projects/AIM/assets/fontawesome-pro-5.15.4\" \"c:/Users/colin/Projects/AIM/wwwroot/assets/fontawesome-pro-5.15.4\")",
+      "Bash(cp -r c:/Users/colin/Projects/AIM/assets/images c:/Users/colin/Projects/AIM/wwwroot/assets/images)",
+      "Bash(dotnet run *)",
+      "Bash(psql --version)",
+      "Bash(pg_isready)"
+    ]
+  }
+}

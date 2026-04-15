@@ -1,0 +1,1247 @@
+@page
+@{ Layout = null; }
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AIM — Adaptive Intelligence Monitor</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: { extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] } } }
+    }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.9/dist/cdn.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.48.0/dist/apexcharts.min.js"></script>
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.0/styles/ag-grid.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.0/styles/ag-theme-alpine.css">
+  <script src="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.0/dist/ag-grid-community.min.js"></script>
+
+  <script src="https://unpkg.com/lucide@0.344.0/dist/umd/lucide.min.js"></script>
+
+  <!-- Leaflet — free mapping, no API key required -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    body { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; }
+
+    /* ── Leaflet dark theme ── */
+    .leaflet-container { background:#0d1321 !important; }
+    .leaflet-control-zoom a { background:#1e293b !important; color:#94a3b8 !important; border-color:#334155 !important; }
+    .leaflet-control-zoom a:hover { background:#334155 !important; color:#e2e8f0 !important; }
+    .leaflet-bar { border:none !important; box-shadow:0 2px 8px rgba(0,0,0,.5) !important; }
+    .leaflet-control-attribution { background:rgba(7,11,22,.8) !important; color:#475569 !important; font-size:10px !important; }
+    .leaflet-control-attribution a { color:#60a5fa !important; }
+
+    /* ── Layout ── */
+    #sidebar { position:fixed; left:0; top:0; bottom:0; width:232px; background:#0b0f1e; border-right:1px solid #1e293b; display:flex; flex-direction:column; z-index:40; }
+    #main    { margin-left:232px; min-height:100vh; background:#070b16; }
+    #main.geo-active { height:100vh; overflow:hidden; }
+
+    /* ── AG Grid dark ── */
+    .ag-theme-alpine-dark {
+      --ag-background-color:#111827;
+      --ag-header-background-color:#0d1321;
+      --ag-odd-row-background-color:#0f1629;
+      --ag-row-hover-color:rgba(59,130,246,.06);
+      --ag-selected-row-background-color:rgba(59,130,246,.12);
+      --ag-border-color:#1e293b;
+      --ag-header-foreground-color:#475569;
+      --ag-foreground-color:#e2e8f0;
+      --ag-font-size:13px;
+      --ag-row-height:48px;
+      --ag-header-height:40px;
+      --ag-cell-horizontal-padding:14px;
+      --ag-font-family:'Inter', ui-sans-serif, system-ui, sans-serif;
+    }
+    .ag-theme-alpine-dark .ag-header-cell-text { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; }
+    .ag-theme-alpine-dark .ag-row { border-bottom:1px solid #1e293b; cursor:pointer; }
+    .ag-theme-alpine-dark .ag-root-wrapper { border:none; }
+
+    /* ── Risk badges ── */
+    .rb { display:inline-flex; align-items:center; padding:2px 8px; border-radius:9999px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; white-space:nowrap; }
+    .rb-TOP      { background:rgba(239,68,68,.15);  color:#f87171; border:1px solid rgba(239,68,68,.3); }
+    .rb-HIGH     { background:rgba(249,115,22,.15); color:#fb923c; border:1px solid rgba(249,115,22,.3); }
+    .rb-MODERATE { background:rgba(234,179,8,.15);  color:#fbbf24; border:1px solid rgba(234,179,8,.3); }
+    .rb-LOW      { background:rgba(34,197,94,.15);  color:#4ade80; border:1px solid rgba(34,197,94,.3); }
+
+    /* ── Score bar ── */
+    .sbar { display:flex; align-items:center; gap:7px; width:100%; }
+    .sbar-track { flex:1; height:4px; background:#1e293b; border-radius:2px; overflow:hidden; }
+    .sbar-fill  { height:100%; border-radius:2px; background:linear-gradient(90deg,#3b82f6,#818cf8); }
+
+    /* ── Drawer ── */
+    #drawer { position:fixed; right:0; top:0; bottom:0; width:472px; background:#0f172a; border-left:1px solid #1e293b; z-index:50; display:flex; flex-direction:column; transform:translateX(100%); transition:transform .3s cubic-bezier(.4,0,.2,1); }
+    #drawer.open { transform:translateX(0); }
+    #backdrop { position:fixed; inset:0; background:rgba(0,0,0,.55); backdrop-filter:blur(2px); z-index:49; opacity:0; pointer-events:none; transition:opacity .3s; }
+    #backdrop.open { opacity:1; pointer-events:auto; }
+
+    /* ── Toast ── */
+    #toasts { position:fixed; bottom:24px; right:24px; z-index:100; display:flex; flex-direction:column; gap:8px; pointer-events:none; }
+    .toast { display:flex; align-items:center; gap:8px; padding:10px 14px; border-radius:8px; font-size:12px; font-weight:500; animation:slideUp .25s ease; pointer-events:auto; }
+    .toast-success { background:#052e16; border:1px solid #14532d; color:#86efac; }
+    .toast-info    { background:#0c1a2e; border:1px solid #1e3a5f; color:#93c5fd; }
+    .toast-warn    { background:#1c1003; border:1px solid #451a03; color:#fcd34d; }
+    .toast-error   { background:#1c0909; border:1px solid #450a0a; color:#fca5a5; }
+    @@keyframes slideUp { from{transform:translateY(12px);opacity:0} to{transform:translateY(0);opacity:1} }
+
+    /* ── Nav / tier buttons ── */
+    .nav-item { display:flex; align-items:center; gap:9px; padding:7px 12px; border-radius:7px; cursor:pointer; transition:all .15s; color:#475569; font-size:13px; font-weight:500; }
+    .nav-item:hover   { background:#1e293b; color:#cbd5e1; }
+    .nav-item.active  { background:rgba(59,130,246,.12); color:#93c5fd; }
+    .tier-btn { display:flex; align-items:center; justify-content:space-between; padding:6px 12px; border-radius:6px; cursor:pointer; transition:all .15s; font-size:12px; font-weight:500; }
+    .tier-btn:hover { background:rgba(30,41,59,.4); }
+
+    /* ── Misc ── */
+    .pulse { width:7px; height:7px; border-radius:50%; animation:pulse 2s infinite; }
+    @@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+    ::-webkit-scrollbar { width:5px; height:5px; }
+    ::-webkit-scrollbar-track { background:transparent; }
+    ::-webkit-scrollbar-thumb { background:#334155; border-radius:3px; }
+    .tab-btn { padding:8px 12px; font-size:12px; font-weight:500; border-bottom:2px solid transparent; color:#475569; transition:all .15s; cursor:pointer; }
+    .tab-btn.active { border-bottom-color:#3b82f6; color:#60a5fa; }
+    .tab-btn:hover:not(.active) { color:#94a3b8; }
+  </style>
+
+</head>
+<body class="bg-[#070b16] text-slate-100 antialiased">
+
+<div x-data="aim()"
+     @@keydown.window.prevent.slash="focusSearch()"
+     @@keydown.window.escape="closeDrawer()"
+     @@keydown.window.t="toggleRisk('TOP')"
+     @@keydown.window.h="toggleRisk('HIGH')"
+     @@keydown.window.m="toggleRisk('MODERATE')"
+     @@keydown.window.l="toggleRisk('LOW')"
+     @@keydown.window.a="toggleRisk('')">
+
+  <!-- ════════════════════════════ SIDEBAR ════════════════════════════ -->
+  <aside id="sidebar">
+    <div class="px-4 pt-4 pb-3 border-b border-slate-800">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-blue-900/40">
+          <i data-lucide="shield" class="w-4 h-4 text-white"></i>
+        </div>
+        <div>
+          <div class="text-sm font-bold tracking-wide text-white">AIM</div>
+          <div class="text-[10px] text-slate-500 -mt-0.5 leading-tight">Adaptive Intelligence Monitor</div>
+        </div>
+        <div class="ml-auto flex items-center gap-1 text-[10px] text-slate-600">
+          <span class="pulse bg-green-500"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="px-3 pt-3 space-y-0.5">
+      <p class="text-[10px] font-semibold text-slate-700 uppercase tracking-widest px-3 mb-1.5">Views</p>
+      <div @@click="navTo('overview')" :class="currentView==='overview' ? 'active' : ''" class="nav-item">
+        <i data-lucide="layout-dashboard" class="w-4 h-4 flex-shrink-0"></i><span>Overview</span>
+      </div>
+      <div @@click="navTo('risk')" :class="currentView==='risk' ? 'active' : ''" class="nav-item">
+        <i data-lucide="alert-triangle" class="w-4 h-4 flex-shrink-0"></i><span>Risk Intelligence</span>
+        <span class="ml-auto text-[10px] bg-red-950 text-red-400 px-1.5 py-0.5 rounded-full"
+              x-text="(kpi.topCount + kpi.highCount) || ''"></span>
+      </div>
+      <div @@click="navTo('products')" :class="currentView==='products' ? 'active' : ''" class="nav-item">
+        <i data-lucide="package" class="w-4 h-4 flex-shrink-0"></i><span>Products</span>
+      </div>
+      <div @@click="navTo('geographic')" :class="currentView==='geographic' ? 'active' : ''" class="nav-item">
+        <i data-lucide="map-pin" class="w-4 h-4 flex-shrink-0"></i><span>Geographic</span>
+      </div>
+      <div @@click="navTo('reports')" :class="currentView==='reports' ? 'active' : ''" class="nav-item">
+        <i data-lucide="file-bar-chart" class="w-4 h-4 flex-shrink-0"></i><span>Reports</span>
+      </div>
+    </div>
+
+    <div class="px-3 mt-5">
+      <p class="text-[10px] font-semibold text-slate-700 uppercase tracking-widest px-3 mb-1.5">Risk Tier Filter</p>
+      <div class="space-y-0.5">
+        <div @@click="toggleRisk('')"
+             :class="activeRisks.length === 0 ? 'bg-slate-800 text-slate-200' : 'text-slate-500 hover:text-slate-300'"
+             class="tier-btn">
+          <span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-blue-500"></span>All</span>
+          <span class="text-xs text-slate-600" x-text="kpi.total"></span>
+        </div>
+        <div @@click="toggleRisk('TOP')"
+             :class="activeRisks.includes('TOP') ? 'bg-red-950/60 text-red-300 ring-1 ring-red-800/40' : 'text-slate-500 hover:text-slate-300'"
+             class="tier-btn">
+          <span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-red-500"></span>TOP</span>
+          <span class="text-xs" :class="activeRisks.includes('TOP')?'text-red-400':'text-slate-600'" x-text="kpi.topCount"></span>
+        </div>
+        <div @@click="toggleRisk('HIGH')"
+             :class="activeRisks.includes('HIGH') ? 'bg-orange-950/60 text-orange-300 ring-1 ring-orange-800/40' : 'text-slate-500 hover:text-slate-300'"
+             class="tier-btn">
+          <span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-orange-500"></span>HIGH</span>
+          <span class="text-xs" :class="activeRisks.includes('HIGH')?'text-orange-400':'text-slate-600'" x-text="kpi.highCount"></span>
+        </div>
+        <div @@click="toggleRisk('MODERATE')"
+             :class="activeRisks.includes('MODERATE') ? 'bg-amber-950/60 text-amber-300 ring-1 ring-amber-800/40' : 'text-slate-500 hover:text-slate-300'"
+             class="tier-btn">
+          <span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-amber-500"></span>MODERATE</span>
+          <span class="text-xs" :class="activeRisks.includes('MODERATE')?'text-amber-400':'text-slate-600'" x-text="kpi.moderateCount"></span>
+        </div>
+        <div @@click="toggleRisk('LOW')"
+             :class="activeRisks.includes('LOW') ? 'bg-green-950/60 text-green-300 ring-1 ring-green-800/40' : 'text-slate-500 hover:text-slate-300'"
+             class="tier-btn">
+          <span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-green-500"></span>LOW</span>
+          <span class="text-xs" :class="activeRisks.includes('LOW')?'text-green-400':'text-slate-600'" x-text="kpi.lowCount"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-auto px-4 pb-4 pt-3 border-t border-slate-800">
+      <p class="text-[10px] text-slate-700 mb-1.5 font-medium">Keyboard shortcuts</p>
+      <div class="space-y-0.5 text-[10px] text-slate-600">
+        <div class="flex justify-between"><span>Search</span><kbd class="bg-slate-800 text-slate-500 px-1.5 rounded text-[9px]">/</kbd></div>
+        <div class="flex justify-between"><span>Filter risk</span><kbd class="bg-slate-800 text-slate-500 px-1.5 rounded text-[9px]">T H M L A</kbd></div>
+        <div class="flex justify-between"><span>Close panel</span><kbd class="bg-slate-800 text-slate-500 px-1.5 rounded text-[9px]">Esc</kbd></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ════════════════════════════ MAIN ════════════════════════════ -->
+  <main id="main" :class="currentView === 'geographic' ? 'geo-active' : ''">
+
+    <!-- Top bar -->
+    <div class="sticky top-0 z-30 flex items-center gap-3 px-6 h-12 border-b border-slate-800/70 bg-[#070b16]/90 backdrop-blur-sm">
+      <div class="text-xs text-slate-500">
+        <span class="text-slate-300 font-medium" x-text="{'overview':'Overview','risk':'Risk Intelligence','products':'Products','geographic':'Geographic','reports':'Reports'}[currentView]"></span>
+        <template x-if="activeRisks.length > 0">
+          <span> / <span class="text-slate-400" x-text="activeRisks.join(' + ') + ' Risk'"></span></span>
+        </template>
+      </div>
+      <div class="flex-1"></div>
+      <div class="relative">
+        <i data-lucide="search" class="w-3.5 h-3.5 text-slate-600 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+        <input id="grid-search" type="text" placeholder="Search vendors… ( / )"
+               x-model="searchQuery" @@input.debounce.250ms="applySearch()"
+               class="w-52 bg-slate-800/70 border border-slate-700 text-slate-200 text-xs rounded-lg pl-8 pr-3 py-1.5 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-500 transition" />
+      </div>
+      <button @@click="refreshData()" class="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-100 bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-700 transition">
+        <span class="inline-flex" :class="loading ? 'animate-spin' : ''"><i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i></span> Refresh
+      </button>
+      <button @@click="exportCsv()" class="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-100 bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-700 transition">
+        <i data-lucide="download" class="w-3.5 h-3.5"></i> Export
+      </button>
+    </div>
+
+    <div x-show="currentView !== 'geographic' && currentView !== 'reports'" class="px-6 py-5 space-y-5">
+
+      <!-- Health Banner -->
+      <div class="relative overflow-hidden rounded-xl border border-blue-900/30 bg-gradient-to-r from-blue-950/50 via-[#0d1a35]/60 to-transparent p-4 flex items-center gap-5">
+        <div class="text-center flex-shrink-0">
+          <div class="text-4xl font-black text-white tabular-nums" x-text="healthScore + '%'">—</div>
+          <div class="text-[10px] font-bold uppercase tracking-widest text-blue-400 mt-0.5">Brand Protection Index <span class="text-slate-600 font-normal normal-case tracking-normal">(global)</span></div>
+        </div>
+        <div class="w-px self-stretch bg-blue-900/50 flex-shrink-0"></div>
+        <div class="text-xs text-slate-400 max-w-xs leading-relaxed">
+          Vendors at <span class="text-green-400 font-semibold">LOW</span> or <span class="text-amber-400 font-semibold">MODERATE</span> risk across the full dataset. Always global — unaffected by tier filter. Target above 70%.
+        </div>
+        <div class="ml-auto flex-shrink-0 flex items-center gap-1.5 text-xs text-slate-500">
+          <span class="pulse bg-green-500"></span> Live
+        </div>
+        <div class="absolute -right-6 -top-6 w-28 h-28 bg-blue-600/5 rounded-full blur-2xl pointer-events-none"></div>
+      </div>
+
+      <!-- KPI Cards -->
+      <div class="grid grid-cols-4 gap-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 overflow-hidden">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Total Vendors</p>
+              <p class="text-2xl font-bold text-white mt-1 tabular-nums" x-text="loading ? '—' : view.total.toLocaleString()"></p>
+            </div>
+            <div class="w-8 h-8 rounded-lg bg-blue-900/40 flex items-center justify-center flex-shrink-0">
+              <i data-lucide="users" class="w-4 h-4 text-blue-400"></i>
+            </div>
+          </div>
+          <div id="sp-total" class="mt-2 -mx-1" style="height:38px"></div>
+          <p class="text-[11px] text-slate-600 mt-1">Across all risk tiers</p>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 overflow-hidden">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">TOP + HIGH Risk</p>
+              <p class="text-2xl font-bold text-red-400 mt-1 tabular-nums" x-text="loading ? '—' : view.highRisk.toLocaleString()"></p>
+            </div>
+            <div class="w-8 h-8 rounded-lg bg-red-900/40 flex items-center justify-center flex-shrink-0">
+              <i data-lucide="alert-triangle" class="w-4 h-4 text-red-400"></i>
+            </div>
+          </div>
+          <div id="sp-high" class="mt-2 -mx-1" style="height:38px"></div>
+          <p class="text-[11px] text-slate-600 mt-1">Require immediate review</p>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 overflow-hidden">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Products Tracked</p>
+              <p class="text-2xl font-bold text-white mt-1 tabular-nums" x-text="loading ? '—' : view.products.toLocaleString()"></p>
+            </div>
+            <div class="w-8 h-8 rounded-lg bg-purple-900/40 flex items-center justify-center flex-shrink-0">
+              <i data-lucide="package" class="w-4 h-4 text-purple-400"></i>
+            </div>
+          </div>
+          <div id="sp-products" class="mt-2 -mx-1" style="height:38px"></div>
+          <p class="text-[11px] text-slate-600 mt-1">Distinct product SKUs</p>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 overflow-hidden">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Unverified Sellers</p>
+              <p class="text-2xl font-bold text-amber-400 mt-1 tabular-nums" x-text="loading ? '—' : view.unverified.toLocaleString()"></p>
+            </div>
+            <div class="w-8 h-8 rounded-lg bg-amber-900/40 flex items-center justify-center flex-shrink-0">
+              <i data-lucide="shield-off" class="w-4 h-4 text-amber-400"></i>
+            </div>
+          </div>
+          <div id="sp-unverified" class="mt-2 -mx-1" style="height:38px"></div>
+          <p class="text-[11px] text-slate-600 mt-1">No verified company status</p>
+        </div>
+      </div>
+
+      <!-- Charts Row -->
+      <div class="grid grid-cols-5 gap-4">
+        <div class="col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <p class="text-sm font-semibold text-slate-200">Risk Distribution</p>
+          <p class="text-xs text-slate-500 mt-0.5 mb-3">Vendor count by tier</p>
+          <div id="chart-donut" style="height:190px"></div>
+        </div>
+        <div class="col-span-3 bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <p class="text-sm font-semibold text-slate-200">Annual Sales by State</p>
+          <p class="text-xs text-slate-500 mt-0.5 mb-3">Top 10 states by revenue</p>
+          <div id="chart-states" style="height:190px"></div>
+        </div>
+      </div>
+
+      <!-- Grid Panel -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+        <div class="flex items-center justify-between px-4 py-2.5 border-b border-slate-800">
+          <div class="flex items-center gap-2.5">
+            <span class="text-sm font-semibold text-slate-200">Vendor Intelligence</span>
+            <span class="text-[11px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full tabular-nums"
+                  x-text="rowCount + ' records'"></span>
+          </div>
+          <div x-show="selected.length > 0"
+               x-transition:enter="transition duration-150"
+               x-transition:enter-start="opacity-0 -translate-y-1"
+               x-transition:enter-end="opacity-100 translate-y-0"
+               class="flex items-center gap-2 text-xs bg-amber-950/40 border border-amber-900/40 text-amber-300 px-3 py-1.5 rounded-lg">
+            <i data-lucide="check-square" class="w-3.5 h-3.5"></i>
+            <span x-text="selected.length + ' selected'"></span>
+            <button @@click="bulkFlag()" class="underline hover:text-amber-100 ml-1">Flag for review</button>
+            <button @@click="clearSel()" class="text-slate-500 hover:text-slate-300 ml-1">✕</button>
+          </div>
+        </div>
+        <div id="vendor-grid" class="ag-theme-alpine-dark" style="height:500px;width:100%"></div>
+      </div>
+
+    </div>
+
+    <!-- ══════════════════════════ GEOGRAPHIC VIEW ══════════════════════════ -->
+    <div x-show="currentView === 'geographic'" style="display:none" class="flex">
+
+      <!-- Map — explicit pixel height so Leaflet never sees clientHeight=0 -->
+      <div class="flex-1 relative bg-[#0d1321]" style="height:calc(100vh - 48px)">
+        <div x-show="geoLoading" class="absolute inset-0 z-20 flex items-center justify-center bg-[#0d1321]/80 backdrop-blur-sm">
+          <div class="flex items-center gap-3 text-sm text-slate-300 bg-slate-900 border border-slate-700 px-5 py-3 rounded-xl shadow-xl">
+            <div class="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin flex-shrink-0"></div>
+            <span x-text="geoStatus || 'Loading map…'"></span>
+          </div>
+        </div>
+        <div id="geo-map" style="width:100%;height:calc(100vh - 48px)"></div>
+
+        <!-- Breadcrumb -->
+        <div class="absolute top-3 left-3 z-10 flex items-center gap-1.5 text-xs bg-slate-900/90 backdrop-blur-sm border border-slate-700/60 px-3 py-1.5 rounded-lg shadow-lg">
+          <button @@click="!geoState || _geoShowStates()"
+                  :class="geoState ? 'text-blue-400 hover:underline cursor-pointer' : 'text-slate-200 font-semibold cursor-default'">
+            United States
+          </button>
+          <template x-if="geoState && !geoCity">
+            <span class="flex items-center gap-1.5">
+              <span class="text-slate-600">/</span>
+              <span class="text-slate-200 font-semibold" x-text="geoState"></span>
+            </span>
+          </template>
+          <template x-if="geoState && geoCity">
+            <span class="flex items-center gap-1.5">
+              <span class="text-slate-600">/</span>
+              <button @@click="_geoZoomOut()" class="text-blue-400 hover:underline cursor-pointer" x-text="geoState"></button>
+              <span class="text-slate-600">/</span>
+              <span class="text-slate-200 font-semibold" x-text="geoCity"></span>
+            </span>
+          </template>
+        </div>
+
+        <!-- Legend -->
+        <div class="absolute bottom-6 left-3 z-10 bg-slate-900/90 backdrop-blur-sm border border-slate-700/60 px-3 py-2.5 rounded-lg shadow-lg">
+          <p class="text-[9px] font-bold uppercase tracking-widest text-slate-600 mb-1.5">Risk %</p>
+          <div class="space-y-1 text-[10px] text-slate-400">
+            <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-red-500 flex-shrink-0"></span>&gt;50% High Risk</div>
+            <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-orange-500 flex-shrink-0"></span>30–50% High Risk</div>
+            <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-amber-500 flex-shrink-0"></span>10–30% High Risk</div>
+            <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-green-500 flex-shrink-0"></span>&lt;10% High Risk</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Side Panel -->
+      <div class="w-72 flex-shrink-0 bg-slate-900 border-l border-slate-800 flex flex-col" style="height:100%;overflow:hidden">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-slate-800 flex-shrink-0">
+          <div>
+            <p class="text-sm font-semibold text-slate-200"
+               x-text="geoCity ? geoCity + ', ' + geoState : geoState ? geoState : 'All States'"></p>
+            <p class="text-[10px] text-slate-500 mt-0.5"
+               x-text="geoCity ? geoItems.length + ' products' : geoState ? geoItems.length + ' cities' : geoItems.length + ' states'"></p>
+          </div>
+          <button x-show="geoState" @@click="_geoZoomOut()"
+                  class="flex items-center gap-1 text-[11px] text-blue-400 hover:text-blue-300 bg-blue-900/20 hover:bg-blue-900/40 border border-blue-900/30 px-2 py-1 rounded transition">
+            <i data-lucide="arrow-left" class="w-3 h-3"></i> Back
+          </button>
+        </div>
+        <div class="flex-1 overflow-y-auto">
+          <template x-for="item in geoItems" :key="item.type + '_' + item.name">
+            <div>
+              <template x-if="item.type === 'state'">
+                <div @@click="_geoClickState({state:item.name,total:item.count,highRisk:item.highRisk})"
+                     class="flex items-center gap-3 px-4 py-2.5 border-b border-slate-800/50 hover:bg-slate-800/40 cursor-pointer group transition-colors">
+                  <div class="w-8 h-8 rounded bg-slate-800 group-hover:bg-blue-900/30 flex items-center justify-center text-[11px] font-bold text-slate-300 flex-shrink-0 transition-colors"
+                       x-text="item.name"></div>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-xs font-medium text-slate-200" x-text="item.name"></p>
+                    <p class="text-[10px] text-slate-500" x-text="item.count.toLocaleString() + ' vendors'"></p>
+                  </div>
+                  <div class="flex items-center gap-1.5 flex-shrink-0">
+                    <span x-show="item.highRisk > 0" class="text-[10px] font-bold text-red-400" x-text="item.highRisk"></span>
+                    <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-slate-700 group-hover:text-slate-400 transition-colors"></i>
+                  </div>
+                </div>
+              </template>
+              <template x-if="item.type === 'city'">
+                <div @@click="_geoClickCity(item)"
+                     class="flex items-center gap-3 px-4 py-2.5 border-b border-slate-800/50 hover:bg-slate-800/40 cursor-pointer group transition-colors">
+                  <div class="flex-1 min-w-0">
+                    <p class="text-xs font-medium text-slate-200" x-text="item.name"></p>
+                    <div class="flex items-center gap-2 mt-0.5">
+                      <p class="text-[10px] text-slate-500" x-text="item.count + ' vendors'"></p>
+                      <span x-show="item.highRisk > 0" class="text-[10px] font-bold text-red-400" x-text="item.highRisk + ' high'"></span>
+                    </div>
+                  </div>
+                  <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-slate-700 group-hover:text-slate-400 transition-colors flex-shrink-0"></i>
+                </div>
+              </template>
+              <template x-if="item.type === 'product'">
+                <div @@click="openDrawer(item.record)"
+                     class="flex items-center gap-2.5 px-4 py-2.5 border-b border-slate-800/50 hover:bg-slate-800/40 cursor-pointer group transition-colors">
+                  <div class="flex-1 min-w-0">
+                    <p class="text-xs font-medium text-slate-200 truncate" x-text="item.name"></p>
+                    <p class="text-[10px] text-slate-500 truncate mt-0.5" x-text="item.locationStr || '—'"></p>
+                  </div>
+                  <span class="rb flex-shrink-0" :class="'rb-' + (item.risk || 'LOW')" x-text="item.risk || '—'"></span>
+                </div>
+              </template>
+            </div>
+          </template>
+          <div x-show="!geoLoading && geoItems.length === 0" class="flex flex-col items-center justify-center py-12 text-slate-600 text-xs gap-2">
+            <i data-lucide="map-pin-off" class="w-7 h-7 text-slate-700"></i>
+            No location data available
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════ REPORTS VIEW ══════════════════════════ -->
+    <div x-show="currentView === 'reports'" style="display:none" class="px-6 py-5 flex flex-col min-h-[calc(100vh-48px)]">
+      <div class="flex flex-col items-center justify-center flex-1 rounded-xl border border-slate-800 bg-slate-900/50 gap-4">
+        <i data-lucide="bar-chart-2" class="w-12 h-12 text-slate-400"></i>
+        <div class="text-center">
+          <p class="text-slate-300 font-medium mb-1">Reports</p>
+          <p class="text-xs text-slate-500 max-w-xs">Scheduled reports, export templates, and trend analysis.<br>Coming in a future release.</p>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ════════════════════════════ BACKDROP ════════════════════════════ -->
+  <div id="backdrop" @@click="closeDrawer()"></div>
+
+  <!-- ════════════════════════════ DRAWER ════════════════════════════ -->
+  <aside id="drawer">
+    <template x-if="dv">
+      <div class="flex flex-col h-full">
+
+        <div class="px-5 pt-4 pb-3 border-b border-slate-800">
+          <div class="flex items-start justify-between">
+            <div class="flex-1 min-w-0 pr-3">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="rb" :class="'rb-' + dv.SCORE_CATEGORY" x-text="dv.SCORE_CATEGORY || '—'"></span>
+                <span class="text-[11px] text-slate-600">ID #<span x-text="dv.VENDOR_ID"></span></span>
+              </div>
+              <div class="text-sm font-bold text-white truncate" x-text="dv.VENDOR_NAME"></div>
+              <div class="text-xs text-slate-400 mt-0.5 truncate" x-text="dv.PRODUCT_NAME"></div>
+            </div>
+            <button @@click="closeDrawer()" class="text-slate-600 hover:text-slate-300 transition flex-shrink-0 mt-0.5">
+              <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="flex border-b border-slate-800 px-5">
+          <button @@click="dtab='overview'"     :class="dtab==='overview'?'active':''"     class="tab-btn">Overview</button>
+          <button @@click="dtab='intelligence'" :class="dtab==='intelligence'?'active':''" class="tab-btn">Intelligence</button>
+          <button @@click="dtab='actions'"      :class="dtab==='actions'?'active':''"      class="tab-btn">Actions</button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+
+          <!-- OVERVIEW -->
+          <template x-if="dtab === 'overview'">
+            <div class="space-y-3">
+              <div class="bg-slate-800/50 rounded-lg p-3.5 space-y-2.5">
+                <p class="text-[10px] font-bold uppercase tracking-widest text-slate-500">Seller</p>
+                <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                  <div>
+                    <p class="text-slate-500">Name</p>
+                    <p class="text-slate-200 font-medium mt-0.5" x-text="[dv.SELLER_FIRST_NAME,dv.SELLER_LAST_NAME].filter(Boolean).join(' ') || '—'"></p>
+                  </div>
+                  <div>
+                    <p class="text-slate-500">Category</p>
+                    <p class="text-slate-200 font-medium mt-0.5" x-text="dv.PRODUCT_GATEGORY || '—'"></p>
+                  </div>
+                  <div>
+                    <p class="text-slate-500">Phone</p>
+                    <p class="text-slate-200 mt-0.5" x-text="dv.SELLER_PHONE || '—'"></p>
+                  </div>
+                  <div>
+                    <p class="text-slate-500">Email</p>
+                    <p class="text-slate-200 mt-0.5 truncate" x-text="dv.SELLER_EMAIL || '—'"></p>
+                  </div>
+                </div>
+                <div>
+                  <p class="text-slate-500 text-xs">Address</p>
+                  <p class="text-slate-200 text-xs mt-0.5" x-text="[dv.STREET_NAME,dv.CITY,dv.STATE,dv.ZIP_CODE].filter(Boolean).join(', ') || '—'"></p>
+                </div>
+                <template x-if="dv.LOCATION_COUNT > 1">
+                  <div>
+                    <p class="text-slate-500 text-xs">All Locations <span class="text-slate-600" x-text="'(' + dv.LOCATION_COUNT + ')'"></span></p>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                      <template x-for="loc in (dv.LOCATIONS_CSV||'').split('|').filter(Boolean).map(l=>{const[s,c]=l.split('~');return (c||'')+', '+(s||'');})" :key="loc">
+                        <span class="bg-slate-800 text-slate-300 rounded px-1.5 py-0.5 text-[10px]" x-text="loc"></span>
+                      </template>
+                    </div>
+                  </div>
+                </template>
+                <template x-if="dv.SELLER_URL">
+                  <div>
+                    <p class="text-slate-500 text-xs">Listing URL</p>
+                    <a :href="dv.SELLER_URL" target="_blank" rel="noopener noreferrer"
+                       class="text-blue-400 text-xs hover:underline truncate block mt-0.5" x-text="dv.SELLER_URL"></a>
+                  </div>
+                </template>
+              </div>
+              <div class="bg-slate-800/50 rounded-lg p-3.5">
+                <p class="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2.5">Financials</p>
+                <div class="grid grid-cols-3 gap-2 text-center">
+                  <div>
+                    <p class="text-sm font-bold text-white tabular-nums" x-text="'$' + Number(dv.ANNUAL_SALES).toLocaleString(undefined,{maximumFractionDigits:0})"></p>
+                    <p class="text-[10px] text-slate-500 mt-0.5">Annual Sales</p>
+                  </div>
+                  <div>
+                    <p class="text-sm font-bold text-white tabular-nums" x-text="'$' + Number(dv.PRODUCT_PRICE).toFixed(2)"></p>
+                    <p class="text-[10px] text-slate-500 mt-0.5">Product Price</p>
+                  </div>
+                  <div>
+                    <p class="text-sm font-bold tabular-nums"
+                       :class="Math.abs(Number(dv.PRICE_DIFFERANCE)) > 0 ? 'text-red-400' : 'text-green-400'"
+                       x-text="(Number(dv.PRICE_DIFFERANCE)>0?'+':'')+'$'+Number(dv.PRICE_DIFFERANCE).toFixed(2)"></p>
+                    <p class="text-[10px] text-slate-500 mt-0.5">Price Diff</p>
+                  </div>
+                </div>
+              </div>
+              <div class="bg-slate-800/50 rounded-lg p-3.5">
+                <p class="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Verification</p>
+                <div class="flex items-center justify-between text-xs">
+                  <span class="text-slate-400">Company Status</span>
+                  <span :class="dv.VERIFIED_COMPANY?'text-green-400':'text-red-400'" class="font-semibold"
+                        x-text="dv.VERIFIED_COMPANY ? '✓ Verified' : '✗ Unverified'"></span>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <!-- INTELLIGENCE -->
+          <template x-if="dtab === 'intelligence'">
+            <div class="space-y-3">
+              <div class="bg-slate-800/50 rounded-lg p-3.5 space-y-3">
+                <p class="text-[10px] font-bold uppercase tracking-widest text-slate-500">Score Breakdown</p>
+                <div class="space-y-2.5">
+                  <div>
+                    <div class="flex justify-between text-xs mb-1"><span class="text-slate-400">Rating Score</span><span class="text-slate-200 font-semibold tabular-nums" x-text="dv.RATING_SCORE"></span></div>
+                    <div class="h-1.5 bg-slate-700 rounded-full overflow-hidden"><div class="h-full bg-blue-500 rounded-full" :style="'width:'+Math.min(100,dv.RATING_SCORE)+'%'"></div></div>
+                  </div>
+                  <div>
+                    <div class="flex justify-between text-xs mb-1"><span class="text-slate-400">Product Diversity</span><span class="text-slate-200 font-semibold tabular-nums" x-text="dv.PRODUCT_DIVERSITY_SCORE"></span></div>
+                    <div class="h-1.5 bg-slate-700 rounded-full overflow-hidden"><div class="h-full bg-purple-500 rounded-full" :style="'width:'+Math.min(100,dv.PRODUCT_DIVERSITY_SCORE*8)+'%'"></div></div>
+                  </div>
+                  <div>
+                    <div class="flex justify-between text-xs mb-1"><span class="text-slate-400">Total Score</span><span class="text-slate-200 font-semibold tabular-nums" x-text="dv.TOTAL_SCORE"></span></div>
+                    <div class="h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                      <div class="h-full rounded-full"
+                           :class="{'bg-red-500':dv.SCORE_CATEGORY==='TOP','bg-orange-500':dv.SCORE_CATEGORY==='HIGH','bg-amber-500':dv.SCORE_CATEGORY==='MODERATE','bg-green-500':dv.SCORE_CATEGORY==='LOW'}"
+                           :style="'width:'+Math.min(100,dv.TOTAL_SCORE*2)+'%'"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="bg-slate-800/50 rounded-lg p-3.5">
+                <p class="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2.5">Intelligence Flags</p>
+                <div class="divide-y divide-slate-700/40 text-xs">
+                  <div class="flex items-center justify-between py-2">
+                    <span class="text-slate-400">Article Finding</span>
+                    <span :class="dv.ARTICLE_FINDING?'text-red-400 font-semibold':'text-green-400'"
+                          x-text="dv.ARTICLE_FINDING?'⚠ Detected':'✓ None'"></span>
+                  </div>
+                  <div class="flex items-center justify-between py-2">
+                    <span class="text-slate-400">Seller Name Change</span>
+                    <span :class="dv.SELLER_NAME_CHANGE?'text-red-400 font-semibold':'text-green-400'"
+                          x-text="dv.SELLER_NAME_CHANGE?'⚠ Changed':'✓ Stable'"></span>
+                  </div>
+                  <div class="flex items-center justify-between py-2">
+                    <span class="text-slate-400">Address Mismatch</span>
+                    <span :class="dv.DIFFRENT_ADDRESS?'text-amber-400 font-semibold':'text-green-400'"
+                          x-text="dv.DIFFRENT_ADDRESS?'⚠ Mismatch':'✓ Consistent'"></span>
+                  </div>
+                </div>
+              </div>
+              <template x-if="dv.ARTICLE_URL">
+                <div class="bg-slate-800/50 rounded-lg p-3.5">
+                  <p class="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Source Article</p>
+                  <a :href="dv.ARTICLE_URL" target="_blank" rel="noopener noreferrer"
+                     class="text-blue-400 text-xs hover:underline break-all" x-text="dv.ARTICLE_URL"></a>
+                </div>
+              </template>
+            </div>
+          </template>
+
+          <!-- ACTIONS -->
+          <template x-if="dtab === 'actions'">
+            <div class="space-y-2">
+              <button @@click="act('flag')"   class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-red-950/40 border border-red-900/40 text-red-300 hover:bg-red-950/70 transition text-xs font-medium"><i data-lucide="flag" class="w-3.5 h-3.5 flex-shrink-0"></i> Flag for Takedown Review</button>
+              <button @@click="act('watch')"  class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-amber-950/40 border border-amber-900/40 text-amber-300 hover:bg-amber-950/70 transition text-xs font-medium"><i data-lucide="eye" class="w-3.5 h-3.5 flex-shrink-0"></i> Add to Watchlist</button>
+              <button @@click="act('export')" class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-blue-950/40 border border-blue-900/40 text-blue-300 hover:bg-blue-950/70 transition text-xs font-medium"><i data-lucide="file-down" class="w-3.5 h-3.5 flex-shrink-0"></i> Export Evidence Bundle</button>
+              <button @@click="act('safe')"   class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-green-950/40 border border-green-900/40 text-green-300 hover:bg-green-950/70 transition text-xs font-medium"><i data-lucide="check-circle" class="w-3.5 h-3.5 flex-shrink-0"></i> Mark as Safe / Dismiss</button>
+              <p class="text-[10px] text-slate-700 text-center pt-1">All actions are logged for audit trail purposes</p>
+            </div>
+          </template>
+
+        </div>
+      </div>
+    </template>
+  </aside>
+
+  <div id="toasts"></div>
+
+</div>
+
+<script>
+// AG Grid API stored OUTSIDE Alpine state.
+// Alpine v3 deeply proxies all state objects via JavaScript Proxy.
+// AG Grid's internal methods rely on correct `this` binding — storing the API
+// inside Alpine state causes those bindings to break silently.
+let _g = null;
+
+// ─── Geographic view (Leaflet + OpenStreetMap — free, no API key) ────────────
+let _map = null;
+const _geoMarkers = [];
+const _geoCache = (() => {
+  try { return JSON.parse(sessionStorage.getItem('aim_geocache') || '{}'); } catch(e) { return {}; }
+})();
+const STATE_COORDS = {
+  AL:[32.806671,-86.791130],AK:[61.370716,-152.404419],AZ:[33.729759,-111.431221],
+  AR:[34.969704,-92.373123],CA:[36.116203,-119.681564],CO:[39.059811,-105.311104],
+  CT:[41.597782,-72.755371],DE:[39.318523,-75.507141],FL:[27.766279,-81.686783],
+  GA:[33.040619,-83.643074],HI:[21.094318,-157.498337],ID:[44.240459,-114.478828],
+  IL:[40.349457,-88.986137],IN:[39.849426,-86.258278],IA:[42.011539,-93.210526],
+  KS:[38.526600,-96.726486],KY:[37.668140,-84.670067],LA:[31.169960,-91.867805],
+  ME:[44.693947,-69.381927],MD:[39.063946,-76.802101],MA:[42.230171,-71.530106],
+  MI:[43.326618,-84.536095],MN:[45.694454,-93.900192],MS:[32.741646,-89.678696],
+  MO:[38.456085,-92.288368],MT:[46.921925,-110.454353],NE:[41.125370,-98.268082],
+  NV:[38.313515,-117.055374],NH:[43.452492,-71.563896],NJ:[40.298904,-74.521011],
+  NM:[34.840515,-106.248482],NY:[42.165726,-74.948051],NC:[35.630066,-79.806419],
+  ND:[47.528912,-99.784012],OH:[40.388783,-82.764915],OK:[35.565342,-96.928917],
+  OR:[44.572021,-122.070938],PA:[40.590752,-77.209755],RI:[41.680893,-71.511780],
+  SC:[33.856892,-80.945007],SD:[44.299782,-99.438828],TN:[35.747845,-86.692345],
+  TX:[31.054487,-97.563461],UT:[40.150032,-111.862434],VT:[44.045876,-72.710686],
+  VA:[37.769337,-78.169968],WA:[47.400902,-121.490494],WV:[38.491226,-80.954453],
+  WI:[44.268543,-89.616508],WY:[42.755966,-107.302490],DC:[38.897438,-77.026817]
+};
+
+function aim() {
+  return {
+    loading: true,
+    activeRisks: [],
+    searchQuery: '',
+    currentView: 'overview',
+    rowCount: 0,
+    selected: [],
+    dv: null,
+    dtab: 'overview',
+    vendors: [],
+    allVendors: [],
+    geoState: null,
+    geoCity: null,
+    geoItems: [],
+    geoLoading: false,
+    geoStatus: '',
+    _reportToastShown: false,
+
+    // Sidebar tier counts — set once on init, never change (always show all-tier totals)
+    kpi: { total:0, topCount:0, highCount:0, moderateCount:0, lowCount:0 },
+
+    // KPI card values — update with each filter change
+    view: { total:0, highRisk:0, products:0, unverified:0 },
+
+    get healthScore() {
+      if (!this.kpi.total) return 0;
+      return Math.round(((this.kpi.moderateCount + this.kpi.lowCount) / this.kpi.total) * 100);
+    },
+
+    async init() {
+      window.__aim = this;
+      lucide.createIcons();
+      await this.$nextTick();
+      console.log('[AIM] init — DOM ready, creating grid');
+      this._initGrid();
+      console.log('[AIM] grid created, _g =', _g ? typeof _g : 'NULL');
+      await this._load();
+    },
+
+    navTo(view) {
+      this.currentView = view;
+      if (view === 'overview')   { this.toggleRisk(''); }
+      if (view === 'risk')       { this.toggleRisk(''); this.$nextTick(() => document.getElementById('vendor-grid')?.scrollIntoView({behavior:'smooth',block:'start'})); }
+      if (view === 'products')   { this.toggleRisk(''); this.$nextTick(() => document.getElementById('vendor-grid')?.scrollIntoView({behavior:'smooth',block:'start'})); }
+      if (view === 'geographic') { this.$nextTick(() => this._geoInit()); }
+      if (view === 'reports' && !this._reportToastShown) { this.toast('Reports module coming soon', 'info'); this._reportToastShown = true; }
+    },
+
+    _initGrid() {
+      const self = this;
+
+      const rbR = p => {
+        const v = p.value; if (!v) return '<span style="color:#475569">—</span>';
+        return `<span class="rb rb-${v}">${v}</span>`;
+      };
+      const scoreR = p => {
+        const v = p.value || 0;
+        const pct = Math.min(100, Math.round(v * 1.8));
+        return `<div class="sbar"><div class="sbar-track"><div class="sbar-fill" style="width:${pct}%"></div></div><span style="font-size:11px;color:#475569;min-width:22px;text-align:right">${v}</span></div>`;
+      };
+      const verR = p => p.value ? '<span style="color:#4ade80;font-size:13px">✓</span>' : '<span style="color:#f87171;font-size:13px">✗</span>';
+      const actR = p => `<button onclick="window.__aim._openById(${p.data.VENDOR_ID})" style="font-size:11px;color:#60a5fa;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);padding:2px 10px;border-radius:6px;cursor:pointer;white-space:nowrap">Details</button>`;
+
+      const cols = [
+        { headerName:'Risk',         field:'SCORE_CATEGORY',  width:110, pinned:'left', cellRenderer:rbR, sortable:true, filter:true },
+        { headerName:'Vendor',       field:'VENDOR_NAME',     flex:1, minWidth:155, sortable:true, filter:true, cellStyle:{fontWeight:500,color:'#e2e8f0'} },
+        { headerName:'Product',      field:'PRODUCT_NAME',    flex:1, minWidth:135, sortable:true, filter:true, cellStyle:{color:'#94a3b8'} },
+        { headerName:'Category',     field:'PRODUCT_GATEGORY',width:130, sortable:true, filter:true, cellStyle:{color:'#94a3b8',fontSize:'12px'} },
+        { headerName:'Location', width:160, sortable:true,
+          valueGetter: p => [p.data.CITY, p.data.STATE].filter(Boolean).join(', '),
+          cellRenderer: p => {
+            const primary = [p.data.CITY, p.data.STATE].filter(Boolean).join(', ') || '—';
+            const extra   = (p.data.LOCATION_COUNT || 1) - 1;
+            return extra > 0
+              ? `<span style="color:#64748b;font-size:12px">${primary}</span> <span style="color:#60a5fa;font-size:10px">(+${extra} more)</span>`
+              : `<span style="color:#64748b;font-size:12px">${primary}</span>`;
+          }},
+        { headerName:'Annual Sales', field:'ANNUAL_SALES',    width:130, sortable:true, type:'numericColumn',
+          valueFormatter:p=>p.value?'$'+Number(p.value).toLocaleString(undefined,{maximumFractionDigits:0}):'—', cellStyle:{color:'#e2e8f0'} },
+        { headerName:'Risk Score',   field:'TOTAL_SCORE',     width:145, sortable:true, cellRenderer:scoreR, cellStyle:{display:'flex',alignItems:'center'} },
+        { headerName:'Verified',     field:'VERIFIED_COMPANY',width:82,  cellRenderer:verR, cellStyle:{display:'flex',alignItems:'center',justifyContent:'center'} },
+        { headerName:'',             width:85, pinned:'right', cellRenderer:actR, sortable:false, cellStyle:{display:'flex',alignItems:'center'} }
+      ];
+
+      // Store outside Alpine state — avoids Proxy wrapping that breaks AG Grid's internal `this`
+      _g = agGrid.createGrid(document.getElementById('vendor-grid'), {
+        columnDefs: cols,
+        rowData: [],
+        rowSelection: 'multiple',
+        suppressRowClickSelection: true,
+        animateRows: true,
+        suppressCellFocus: true,
+        defaultColDef: { resizable:true, cellStyle:{display:'flex',alignItems:'center'} },
+        onFirstDataRendered: p => { self.rowCount = p.api.getDisplayedRowCount(); p.api.sizeColumnsToFit(); },
+        onSelectionChanged:  p => { self.selected = p.api.getSelectedRows(); },
+        onRowClicked:        p => { if (p.event.target.tagName !== 'BUTTON') self.openDrawer(p.data); }
+      });
+    },
+
+    async _load() {
+      this.loading = true;
+      try {
+        console.log('[AIM] _load — fetching data...');
+        const [vR, sR] = await Promise.all([
+          fetch('/api/vendors?riskLevel='),
+          fetch('/api/vendors/state-sales')
+        ]);
+        console.log('[AIM] fetch status:', vR.status, sR.status);
+        const vd = await vR.json();
+        const sd = await sR.json();
+
+        const vendors = vd.items || [];
+        const states  = (sd.items || []).filter(s => s.STATE && s.TOTAL_SALES > 0);
+        console.log('[AIM] vendors:', vendors.length, '| states:', states.length);
+
+        // Sidebar counts — derived from unique vendor+product pairs
+        this.kpi.total         = vendors.length;
+        this.kpi.topCount      = vendors.filter(v => v.SCORE_CATEGORY === 'TOP').length;
+        this.kpi.highCount     = vendors.filter(v => v.SCORE_CATEGORY === 'HIGH').length;
+        this.kpi.moderateCount = vendors.filter(v => v.SCORE_CATEGORY === 'MODERATE').length;
+        this.kpi.lowCount      = vendors.filter(v => v.SCORE_CATEGORY === 'LOW').length;
+
+        // KPI cards — full view on initial load
+        this._applyView(vendors);
+
+        // Grid
+        console.log('[AIM] setting grid rowData, _g =', _g ? typeof _g : 'NULL');
+        _g.setGridOption('rowData', vendors);
+        this.allVendors = vendors;
+        this.vendors = vendors;
+        this.rowCount = vendors.length;
+        // Confirm actual displayed rows (not just array length)
+        await this.$nextTick();
+        const actual = _g.getDisplayedRowCount();
+        console.log('[AIM] grid rowData set — array:', vendors.length, '| displayed:', actual);
+
+        this._donut(vendors);
+        this._bars(states);
+        this._sparks();
+
+      } catch(e) {
+        console.error(e);
+        this.toast('Cannot reach server — is the .NET app running on port 5000?', 'error');
+      } finally {
+        this.loading = false;
+        this.$nextTick(() => lucide.createIcons());
+      }
+    },
+
+    // Compute and apply KPI card values for the current view
+    _applyView(vendors) {
+      this.view.total    = new Set(vendors.map(v => v.VENDOR_NAME)).size;
+      this.view.products = new Set(vendors.map(v => v.PRODUCT_NAME)).size;
+      this.view.highRisk = new Set(
+        vendors.filter(v => v.SCORE_CATEGORY === 'TOP' || v.SCORE_CATEGORY === 'HIGH')
+               .map(v => v.VENDOR_NAME)
+      ).size;
+      this.view.unverified = new Set(
+        vendors.filter(v => !v.VERIFIED_COMPANY).map(v => v.VENDOR_NAME)
+      ).size;
+    },
+
+    toggleRisk(level) {
+      if (level === '') {
+        // "All" clears every active selection
+        this.activeRisks = [];
+      } else {
+        const idx = this.activeRisks.indexOf(level);
+        this.activeRisks = idx === -1
+          ? [...this.activeRisks, level]
+          : this.activeRisks.filter(r => r !== level);
+      }
+      this._applyFilter();
+    },
+
+    _applyFilter() {
+      const filtered = this.activeRisks.length === 0
+        ? this.allVendors
+        : this.allVendors.filter(v => this.activeRisks.includes(v.SCORE_CATEGORY));
+
+      this.vendors = filtered;
+      this._applyView(filtered);
+      this._donut(filtered);
+      this._bars(this._stateSalesFromVendors(filtered));
+
+      _g.setGridOption('rowData', filtered);
+      if (this.searchQuery) _g.setGridOption('quickFilterText', this.searchQuery);
+      this.$nextTick(() => { this.rowCount = _g.getDisplayedRowCount(); });
+    },
+
+    // Aggregate annual sales by state from the vendors array.
+    // Uses the primary STATE field on each vendor+product record.
+    _stateSalesFromVendors(vendors) {
+      const map = {};
+      vendors.forEach(v => {
+        if (!v.STATE) return;
+        if (!map[v.STATE]) map[v.STATE] = { STATE: v.STATE, TOTAL_SALES: 0 };
+        map[v.STATE].TOTAL_SALES += Number(v.ANNUAL_SALES) || 0;
+      });
+      return Object.values(map);
+    },
+
+    async refreshData() { await this._load(); this.toast('Data refreshed', 'success'); },
+
+    applySearch() {
+      if (!_g) return;
+      _g.setGridOption('quickFilterText', this.searchQuery);
+      this.rowCount = _g.getDisplayedRowCount();
+    },
+
+    focusSearch() { document.getElementById('grid-search')?.focus(); },
+
+    _openById(id) {
+      if (!_g) return;
+      let found = null;
+      _g.forEachNode(n => { if (n.data?.VENDOR_ID === id) found = n.data; });
+      if (found) this.openDrawer(found);
+    },
+
+    openDrawer(vendor) {
+      this.dv   = vendor;
+      this.dtab = 'overview';
+      document.getElementById('drawer').classList.add('open');
+      document.getElementById('backdrop').classList.add('open');
+      this.$nextTick(() => lucide.createIcons());
+    },
+
+    closeDrawer() {
+      document.getElementById('drawer').classList.remove('open');
+      document.getElementById('backdrop').classList.remove('open');
+      setTimeout(() => { this.dv = null; }, 300);
+    },
+
+    act(type) {
+      const name = this.dv?.VENDOR_NAME || 'Vendor';
+      if (type === 'flag')   this.toast(name + ' flagged for takedown review', 'warn');
+      if (type === 'watch')  this.toast(name + ' added to watchlist', 'info');
+      if (type === 'safe')   { this.closeDrawer(); this.toast(name + ' marked as safe', 'success'); }
+      if (type === 'export') {
+        const a = document.createElement('a');
+        a.href = 'data:application/json,' + encodeURIComponent(JSON.stringify(this.dv, null, 2));
+        a.download = 'evidence-' + this.dv.VENDOR_ID + '.json';
+        a.click();
+        this.toast('Evidence bundle downloaded', 'success');
+      }
+    },
+
+    exportCsv() {
+      if (!_g) return;
+      _g.exportDataAsCsv({ fileName:'aim-' + new Date().toISOString().slice(0,10) + '.csv' });
+      this.toast('CSV exported', 'success');
+    },
+
+    bulkFlag() { this.toast(this.selected.length + ' vendors flagged for review', 'warn'); this.clearSel(); },
+    clearSel() { this.selected = []; if (_g) _g.deselectAll(); },
+
+    toast(msg, type = 'info') {
+      const el = document.createElement('div');
+      el.className = 'toast toast-' + type;
+      el.textContent = msg;
+      document.getElementById('toasts').appendChild(el);
+      setTimeout(() => el.remove(), 3200);
+    },
+
+    _donut(src) {
+      src = src || this.allVendors;
+      const colorMap = { TOP:'#ef4444', HIGH:'#f97316', MODERATE:'#f59e0b', LOW:'#22c55e' };
+      const allTiers = ['TOP','HIGH','MODERATE','LOW'].map(label => ({
+        label,
+        count: new Set(src.filter(v => v.SCORE_CATEGORY === label).map(v => v.VENDOR_NAME)).size,
+        color: colorMap[label]
+      }));
+      const active = this.activeRisks.length > 0
+        ? allTiers.filter(t => this.activeRisks.includes(t.label))
+        : allTiers;
+      const series = active.map(t => t.count);
+      const labels = active.map(t => t.label);
+      const colors = active.map(t => t.color);
+
+      const opts = {
+        chart:{ type:'donut', height:190, background:'transparent', toolbar:{show:false}, animations:{speed:500} },
+        series, labels, colors,
+        dataLabels:{ enabled:false },
+        stroke:{ width:0 },
+        legend:{ show:true, position:'right', fontSize:'11px', labels:{colors:'#94a3b8'}, markers:{size:6},
+                 formatter:(lbl, op) => `${lbl} (${op.w.globals.series[op.seriesIndex]})` },
+        plotOptions:{ pie:{ donut:{ size:'65%' } } },
+        theme:{ mode:'dark' }
+      };
+      const el = document.getElementById('chart-donut');
+      if (el._c) { el._c.updateOptions(opts); }
+      else { setTimeout(() => { el._c = new ApexCharts(el, opts); el._c.render(); }, 50); }
+    },
+
+    _bars(states) {
+      const top10 = [...states].sort((a,b) => b.TOTAL_SALES - a.TOTAL_SALES).slice(0,10);
+      const opts = {
+        chart:{ type:'bar', height:190, background:'transparent', toolbar:{show:false}, animations:{speed:500} },
+        series:[{ name:'Annual Sales', data: top10.map(s => Math.round(Number(s.TOTAL_SALES))) }],
+        xaxis:{ categories:top10.map(s=>s.STATE), labels:{style:{colors:'#475569',fontSize:'11px'}}, axisBorder:{color:'#1e293b'}, axisTicks:{show:false} },
+        yaxis:{ labels:{style:{colors:'#475569',fontSize:'10px'}, formatter:v=>'$'+(v/1e6).toFixed(1)+'M'}, axisBorder:{show:false}, axisTicks:{show:false} },
+        plotOptions:{ bar:{ columnWidth:'52%', borderRadius:3 } },
+        colors:['#3b82f6'],
+        fill:{ type:'gradient', gradient:{type:'vertical', opacityFrom:.85, opacityTo:.35} },
+        grid:{ borderColor:'#1e293b', strokeDashArray:3, yaxis:{lines:{show:true}}, xaxis:{lines:{show:false}} },
+        dataLabels:{ enabled:false },
+        tooltip:{ theme:'dark', y:{ formatter:v=>'$'+v.toLocaleString() } },
+        theme:{ mode:'dark' }
+      };
+      const el = document.getElementById('chart-states');
+      if (el._c) {
+        el._c.updateOptions({ xaxis:{ categories:opts.xaxis.categories } });
+        el._c.updateSeries(opts.series);
+      } else { setTimeout(() => { el._c = new ApexCharts(el, opts); el._c.render(); }, 50); }
+    },
+
+    _sparks() {
+      const base = {
+        chart:{ type:'area', background:'transparent', toolbar:{show:false}, sparkline:{enabled:true}, animations:{speed:500} },
+        stroke:{ curve:'smooth', width:1.5 },
+        fill:{ type:'gradient', gradient:{opacityFrom:.4, opacityTo:0} },
+        tooltip:{ enabled:false },
+        theme:{ mode:'dark' }
+      };
+      const trend = (val, up) => Array.from({length:12}, (_,i) => {
+        const n = Math.max(1, Math.round(val * .08));
+        const d = up ? i * val * .007 : -i * val * .004;
+        return Math.max(1, Math.round(val + d + (Math.random() > .5 ? n : -n)));
+      });
+      const mk = (id, data, color) => {
+        const el = document.getElementById(id); if (!el) return;
+        const opts = { ...base, series:[{data}], colors:[color] };
+        if (el._c) { el._c.updateSeries([{data}]); }
+        else { setTimeout(() => { el._c = new ApexCharts(el, opts); el._c.render(); }, 50); }
+      };
+      mk('sp-total',      trend(this.kpi.total || 100,  true),  '#3b82f6');
+      mk('sp-high',       trend((this.kpi.topCount + this.kpi.highCount) || 10, false), '#ef4444');
+      mk('sp-products',   trend(this.view.products || 50, true),  '#a855f7');
+      mk('sp-unverified', trend(this.view.unverified || 20, false), '#f59e0b');
+    },
+
+    async _geoInit() {
+      this.geoStatus  = 'Initializing map…';
+      this.geoLoading = true;
+      try {
+        await this.$nextTick();
+        await new Promise(r => setTimeout(r, 50)); // let browser finish painting the container
+        if (!_map) {
+          // Leaflet map with CartoDB Dark tiles — free, no key needed
+          _map = L.map('geo-map', {
+            center: [39.5, -98.35], zoom: 4, minZoom: 3,
+            zoomControl: true, attributionControl: true
+          });
+          L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions" target="_blank">CARTO</a>',
+            subdomains: 'abcd', maxZoom: 19
+          }).addTo(_map);
+        }
+        // Always re-measure after x-show makes the container visible
+        _map.invalidateSize();
+        this._geoShowStates();
+      } catch(e) {
+        console.error('[GEO]', e);
+        this.toast('Map failed to load', 'error');
+      } finally {
+        this.geoLoading = false;
+        this.geoStatus  = '';
+      }
+    },
+
+    _geoShowStates() {
+      this.geoState = null;
+      this.geoCity  = null;
+      _geoMarkers.forEach(m => _map.removeLayer(m));
+      _geoMarkers.length = 0;
+
+      const sd = {};
+      // Each vendor+product record may appear in multiple states via LOCATIONS_CSV.
+      // Expand the pipe-separated STATE~CITY pairs to count appearances per state.
+      this.vendors.forEach(v => {
+        const states = [...new Set(
+          (v.LOCATIONS_CSV || '').split('|').filter(Boolean)
+            .map(l => l.split('~')[0]?.trim().toUpperCase()).filter(Boolean)
+        )];
+        // Fall back to v.STATE for records not yet scored
+        if (!states.length && v.STATE) states.push(v.STATE.trim().toUpperCase());
+        states.forEach(s => {
+          if (!sd[s]) sd[s] = {state:s, total:0, highRisk:0};
+          sd[s].total++;
+          if (v.SCORE_CATEGORY === 'TOP' || v.SCORE_CATEGORY === 'HIGH') sd[s].highRisk++;
+        });
+      });
+
+      Object.values(sd).forEach(d => {
+        const c = STATE_COORDS[d.state]; if (!c) return;
+        const pct = d.total ? d.highRisk / d.total : 0;
+        const col = pct > .5 ? '#ef4444' : pct > .3 ? '#f97316' : pct > .1 ? '#f59e0b' : '#22c55e';
+        const sz  = Math.max(32, Math.min(60, 20 + Math.sqrt(d.total) * 2.2)) | 0;
+        const m = L.marker([c[0], c[1]], {
+          icon: this._geoIcon(d.total, col, sz), title: d.state, zIndexOffset: sz
+        }).addTo(_map);
+        m.on('click', () => this._geoClickState(d));
+        _geoMarkers.push(m);
+      });
+
+      this.geoItems = Object.values(sd).sort((a,b) => b.total - a.total).map(d => ({
+        type:'state', name:d.state, count:d.total, highRisk:d.highRisk
+      }));
+      _map.invalidateSize();
+      _map.setView([39.5, -98.35], 4);
+    },
+
+    async _geoClickState(sd) {
+      this.geoState = sd.state;
+      this.geoCity  = null;
+      this.geoLoading = true;
+      _geoMarkers.forEach(m => _map.removeLayer(m));
+      _geoMarkers.length = 0;
+
+      try {
+        // Build city data from LOCATIONS_CSV — each vendor+product record may
+        // appear in multiple cities within this state.
+        const cityMap = {};
+        this.vendors.forEach(v => {
+          const locs = (v.LOCATIONS_CSV || '').split('|').filter(Boolean);
+          const citiesInState = [...new Set(
+            locs.map(l => {
+              const [s, c] = l.split('~');
+              return s?.trim().toUpperCase() === sd.state ? c?.trim() : null;
+            }).filter(Boolean)
+          )];
+          // Fall back to v.CITY if this record has no LOCATIONS_CSV yet
+          if (!citiesInState.length && v.STATE?.trim().toUpperCase() === sd.state && v.CITY) {
+            citiesInState.push(v.CITY.trim());
+          }
+          citiesInState.forEach(c => {
+            if (!cityMap[c]) cityMap[c] = {city:c, state:sd.state, total:0, highRisk:0, vendors:[]};
+            cityMap[c].total++;
+            if (v.SCORE_CATEGORY === 'TOP' || v.SCORE_CATEGORY === 'HIGH') cityMap[c].highRisk++;
+            cityMap[c].vendors.push(v);
+          });
+        });
+
+        const cities = Object.values(cityMap);
+        const latLngs = [];
+
+        // Geocode each city via Nominatim (OSM) — rate limit 1 req/sec, cache in sessionStorage
+        for (let i = 0; i < cities.length; i++) {
+          const cd  = cities[i];
+          const key = `${cd.city},${cd.state}`;
+          this.geoStatus = `Geocoding ${i + 1} / ${cities.length}: ${cd.city}`;
+
+          if (!_geoCache[key]) {
+            try {
+              const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cd.city + ', ' + cd.state + ', USA')}&format=json&limit=1`;
+              const r = await fetch(url, {headers:{'Accept-Language':'en'}});
+              const d = await r.json();
+              if (d?.[0]) _geoCache[key] = {lat: +d[0].lat, lng: +d[0].lon};
+            } catch(e) {}
+            // Nominatim requires ≤ 1 req/sec
+            await new Promise(r => setTimeout(r, 1100));
+          }
+
+          // Add marker immediately as we get each city's coords
+          const pos = _geoCache[key];
+          if (!pos) continue;
+          latLngs.push([pos.lat, pos.lng]);
+          const pct = cd.total ? cd.highRisk / cd.total : 0;
+          const col = pct > .5 ? '#ef4444' : pct > .3 ? '#f97316' : pct > .1 ? '#f59e0b' : '#22c55e';
+          const sz  = Math.max(28, Math.min(52, 16 + Math.sqrt(cd.total) * 3.5)) | 0;
+          const m = L.marker([pos.lat, pos.lng], {
+            icon: this._geoIcon(cd.total, col, sz), title: cd.city, zIndexOffset: sz
+          }).addTo(_map);
+          m.on('click', () => this._geoClickCity(cd));
+          _geoMarkers.push(m);
+        }
+
+        try { sessionStorage.setItem('aim_geocache', JSON.stringify(_geoCache)); } catch(e) {}
+
+        if (latLngs.length > 0) {
+          _map.fitBounds(L.latLngBounds(latLngs), {padding: [60, 60]});
+        } else {
+          const c = STATE_COORDS[sd.state];
+          if (c) _map.setView([c[0], c[1]], 7);
+        }
+
+        this.geoItems = cities.sort((a,b) => b.total - a.total).map(c => ({
+          type:'city', name:c.city, state:c.state, count:c.total, highRisk:c.highRisk, vendors:c.vendors
+        }));
+      } finally {
+        this.geoLoading = false;
+        this.geoStatus  = '';
+      }
+    },
+
+    _geoClickCity(cd) {
+      this.geoCity = cd.city;
+      const pos = _geoCache[`${cd.city},${cd.state}`];
+      if (pos) _map.setView([pos.lat, pos.lng], 11);
+
+      const ORDER = ['TOP','HIGH','MODERATE','LOW'];
+
+      // Deduplicate: the same vendor+product record may have been pushed to
+      // cd.vendors more than once if it appears in multiple cities in this state.
+      const seen = new Set();
+      const unique = (cd.vendors || []).filter(v => {
+        const k = v.VENDOR_NAME + '|' + v.PRODUCT_NAME;
+        if (seen.has(k)) return false;
+        seen.add(k); return true;
+      });
+
+      this.geoItems = unique
+        .sort((a, b) => ORDER.indexOf(a.SCORE_CATEGORY) - ORDER.indexOf(b.SCORE_CATEGORY))
+        .map(v => {
+          // Build "TX: Dallas, Houston • FL: Miami" from LOCATIONS_CSV
+          const byState = {};
+          (v.LOCATIONS_CSV || '').split('|').filter(Boolean).forEach(l => {
+            const [s, c] = l.split('~');
+            if (!s || !c) return;
+            if (!byState[s]) byState[s] = [];
+            byState[s].push(c);
+          });
+          const locationStr = Object.entries(byState)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([s, cs]) => `${s}: ${cs.sort().join(', ')}`)
+            .join(' • ') || (v.STATE ? `${v.STATE}: ${v.CITY}` : '');
+          return {type:'product', name:v.PRODUCT_NAME, vendor:v.VENDOR_NAME, risk:v.SCORE_CATEGORY, locationStr, record:v};
+        });
+    },
+
+    _geoZoomOut() {
+      if (this.geoCity) {
+        const sv = this.vendors.filter(v => v.STATE?.trim().toUpperCase() === this.geoState);
+        this._geoClickState({
+          state:    this.geoState,
+          total:    sv.length,
+          highRisk: sv.filter(v => v.SCORE_CATEGORY==='TOP'||v.SCORE_CATEGORY==='HIGH').length
+        });
+      } else {
+        this._geoShowStates();
+      }
+    },
+
+    // Returns a Leaflet DivIcon — a circular SVG bubble with vendor count
+    _geoIcon(count, color, size) {
+      const fs    = size > 40 ? 13 : size > 28 ? 11 : 9;
+      const label = count > 9999 ? (count/1000|0)+'k' : String(count);
+      const html  = `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};opacity:.88;border:1.5px solid rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:${fs}px;font-family:Inter,ui-sans-serif,system-ui,sans-serif;box-sizing:border-box;pointer-events:auto">${label}</div>`;
+      return L.divIcon({html, className:'', iconSize:[size,size], iconAnchor:[size/2,size/2]});
+    }
+  };
+}
+</script>
+
+</body>
+</html>

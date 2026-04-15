@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AIM — Modern</title>
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            slate: { 950: '#020617' }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- AG Grid Community (virtual scroll, handles 100k+ rows) -->
+  <script src="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.4/dist/ag-grid-community.min.js"></script>
+  <link  href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.4/styles/ag-grid.css" rel="stylesheet" />
+  <link  href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.4/styles/ag-theme-alpine-dark.css" rel="stylesheet" />
+
+  <!-- ApexCharts (modern animated charts) -->
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.48.0/dist/apexcharts.min.js"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@0.344.0/dist/umd/lucide.js"></script>
+
+  <!-- Alpine.js (lightweight reactivity) — must load last -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.9/dist/cdn.min.js"></script>
+
+  <style>
+    [x-cloak] { display: none !important; }
+
+    body { background: #020617; color: #e2e8f0; font-family: 'Inter', system-ui, sans-serif; }
+
+    /* ── Glassmorphism cards ─────────────────────── */
+    .glass {
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(148, 163, 184, 0.08);
+    }
+
+    /* ── Risk gradients ──────────────────────────── */
+    .risk-TOP      { background: linear-gradient(135deg, #ef4444, #b91c1c); }
+    .risk-HIGH     { background: linear-gradient(135deg, #f97316, #c2410c); }
+    .risk-MODERATE { background: linear-gradient(135deg, #eab308, #a16207); }
+    .risk-LOW      { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
+
+    /* ── Skeleton shimmer ────────────────────────── */
+    @keyframes shimmer {
+      0%   { background-position: -600px 0; }
+      100% { background-position:  600px 0; }
+    }
+    .skeleton {
+      background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+      background-size: 600px 100%;
+      animation: shimmer 1.6s infinite;
+      border-radius: 6px;
+    }
+
+    /* ── Toast slide-in ──────────────────────────── */
+    @keyframes toast-in {
+      from { transform: translateX(110%); opacity: 0; }
+      to   { transform: translateX(0);    opacity: 1; }
+    }
+    .toast-item { animation: toast-in 0.3s ease forwards; }
+
+    /* ── Animated counter ────────────────────────── */
+    @keyframes pop-in {
+      0%   { opacity: 0; transform: translateY(8px) scale(0.95); }
+      100% { opacity: 1; transform: translateY(0)   scale(1);    }
+    }
+    .kpi-value { animation: pop-in 0.5s ease forwards; }
+
+    /* ── AG Grid overrides ───────────────────────── */
+    .ag-theme-alpine-dark {
+      --ag-background-color:          #0f172a;
+      --ag-header-background-color:   #020617;
+      --ag-odd-row-background-color:  #0d1929;
+      --ag-row-hover-color:           #1e3a5f;
+      --ag-border-color:              #1e293b;
+      --ag-header-foreground-color:   #64748b;
+      --ag-foreground-color:          #cbd5e1;
+      --ag-font-size:                 13px;
+      --ag-row-height:                44px;
+      --ag-header-height:             40px;
+    }
+    .ag-theme-alpine-dark .ag-root-wrapper { border: none; }
+    .ag-theme-alpine-dark .ag-header-cell-text { font-weight: 600; letter-spacing: 0.05em; font-size: 11px; text-transform: uppercase; }
+
+    /* ── Scrollbar ───────────────────────────────── */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: #020617; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+
+    /* ── Drawer transition ───────────────────────── */
+    .drawer { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+    .drawer-closed { transform: translateX(100%); }
+    .drawer-open   { transform: translateX(0); }
+
+    /* ── Sidebar transition ──────────────────────── */
+    .sidebar { transition: width 0.25s ease; }
+  </style>
+</head>
+
+<body x-data="aim()" x-init="boot()" x-cloak>
+
+  <!-- ═══ TOAST RACK ════════════════════════════════════════════ -->
+  <div id="toasts" class="fixed top-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- ═══ LAYOUT ════════════════════════════════════════════════ -->
+  <div class="flex h-screen overflow-hidden">
+
+    <!-- ── SIDEBAR ─────────────────────────────────────────────── -->
+    <aside :class="nav ? 'w-56' : 'w-16'" class="sidebar flex-shrink-0 bg-slate-900 border-r border-slate-800 flex flex-col overflow-hidden">
+
+      <!-- Branding -->
+      <div class="h-16 flex items-center px-4 gap-3 border-b border-slate-800 flex-shrink-0">
+        <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center font-black text-white text-sm flex-shrink-0 shadow-lg">A</div>
+        <span x-show="nav" class="font-bold text-lg tracking-tight text-white truncate">AIM</span>
+      </div>
+
+      <!-- Nav items -->
+      <nav class="flex-1 py-3 px-2 space-y-0.5 overflow-hidden">
+        <template x-for="item in navItems" :key="item.id">
+          <button
+            @click="page = item.id"
+            :class="page === item.id
+              ? 'bg-blue-600 text-white shadow-md shadow-blue-900/50'
+              : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'"
+            class="w-full flex items-center gap-3 px-2 py-2.5 rounded-lg transition-all text-sm"
+          >
+            <i :data-lucide="item.icon" class="w-4 h-4 flex-shrink-0"></i>
+            <span x-show="nav" class="truncate font-medium" x-text="item.label"></span>
+          </button>
+        </template>
+      </nav>
+
+      <!-- Collapse toggle -->
+      <div class="p-2 border-t border-slate-800 flex-shrink-0">
+        <button @click="nav = !nav; $nextTick(() => lucide.createIcons())"
+          class="w-full flex items-center justify-center p-2 rounded-lg text-slate-500 hover:bg-slate-800 hover:text-white transition-colors">
+          <i :data-lucide="nav ? 'panel-left-close' : 'panel-left-open'" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </aside>
+
+    <!-- ── MAIN ─────────────────────────────────────────────────── -->
+    <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+
+      <!-- TOP BAR -->
+      <header class="h-16 bg-slate-900 border-b border-slate-800 flex items-center px-5 gap-4 flex-shrink-0">
+        <!-- Search with keyboard shortcut -->
+        <div class="relative max-w-sm w-full">
+          <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500"></i>
+          <input
+            x-ref="search"
+            x-model="query"
+            @input.debounce.250ms="onSearch"
+            @keydown.escape="query = ''; onSearch()"
+            type="text"
+            placeholder="Search products…"
+            class="w-full bg-slate-800 border border-slate-700 rounded-lg pl-8 pr-10 py-1.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 transition-all"
+          />
+          <kbd class="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-600 bg-slate-700 px-1 py-0.5 rounded border border-slate-600">/</kbd>
+        </div>
+
+        <div class="flex items-center gap-2 ml-auto">
+          <!-- Notification -->
+          <button class="relative p-2 rounded-lg text-slate-500 hover:bg-slate-800 hover:text-slate-300 transition-colors">
+            <i data-lucide="bell" class="w-4 h-4"></i>
+            <span class="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-500 rounded-full ring-2 ring-slate-900"></span>
+          </button>
+          <!-- Filter panel -->
+          <button @click="filterOpen = !filterOpen"
+            :class="filterOpen ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'"
+            class="p-2 rounded-lg transition-colors">
+            <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>
+          </button>
+          <!-- Divider -->
+          <div class="w-px h-6 bg-slate-800"></div>
+          <!-- Avatar -->
+          <button class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-800 transition-colors">
+            <div class="w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-indigo-700 flex items-center justify-center text-xs font-bold text-white">EP</div>
+            <span class="text-sm text-slate-300 font-medium">Ernest P.</span>
+            <i data-lucide="chevron-down" class="w-3 h-3 text-slate-500"></i>
+          </button>
+        </div>
+      </header>
+
+      <!-- PAGE CONTENT -->
+      <main class="flex-1 overflow-y-auto p-5 space-y-5 bg-slate-950">
+
+        <!-- ── KPI CARDS ─────────────────────────────────────────── -->
+        <div class="grid grid-cols-2 xl:grid-cols-4 gap-4">
+
+          <!-- Volume -->
+          <div class="glass rounded-xl p-4 hover:border-slate-700/60 transition-colors group">
+            <div class="flex items-start justify-between mb-3">
+              <p class="text-xs font-semibold text-slate-500 uppercase tracking-widest">Volume</p>
+              <div class="w-8 h-8 rounded-lg bg-blue-500/10 group-hover:bg-blue-500/20 flex items-center justify-center transition-colors">
+                <i data-lucide="dollar-sign" class="w-4 h-4 text-blue-400"></i>
+              </div>
+            </div>
+            <template x-if="loading">
+              <div class="skeleton h-8 w-28 mb-2"></div>
+            </template>
+            <template x-if="!loading">
+              <p class="kpi-value text-2xl font-bold text-white" x-text="kpi.volume"></p>
+            </template>
+            <div class="mt-2 flex items-center gap-1.5">
+              <span class="flex items-center gap-0.5 text-xs font-medium text-emerald-400">
+                <i data-lucide="trending-up" class="w-3 h-3"></i> 12.5%
+              </span>
+              <span class="text-xs text-slate-600">vs last period</span>
+            </div>
+          </div>
+
+          <!-- Vendors -->
+          <div class="glass rounded-xl p-4 hover:border-slate-700/60 transition-colors group">
+            <div class="flex items-start justify-between mb-3">
+              <p class="text-xs font-semibold text-slate-500 uppercase tracking-widest">Vendors</p>
+              <div class="w-8 h-8 rounded-lg bg-violet-500/10 group-hover:bg-violet-500/20 flex items-center justify-center transition-colors">
+                <i data-lucide="store" class="w-4 h-4 text-violet-400"></i>
+              </div>
+            </div>
+            <template x-if="loading">
+              <div class="skeleton h-8 w-16 mb-2"></div>
+            </template>
+            <template x-if="!loading">
+              <p class="kpi-value text-2xl font-bold text-white" x-text="kpi.vendors"></p>
+            </template>
+            <div class="mt-2 flex items-center gap-1.5">
+              <span class="flex items-center gap-0.5 text-xs font-medium text-emerald-400">
+                <i data-lucide="trending-up" class="w-3 h-3"></i> 5.2%
+              </span>
+              <span class="text-xs text-slate-600">vs last period</span>
+            </div>
+          </div>
+
+          <!-- Products -->
+          <div class="glass rounded-xl p-4 hover:border-slate-700/60 transition-colors group">
+            <div class="flex items-start justify-between mb-3">
+              <p class="text-xs font-semibold text-slate-500 uppercase tracking-widest">Products</p>
+              <div class="w-8 h-8 rounded-lg bg-emerald-500/10 group-hover:bg-emerald-500/20 flex items-center justify-center transition-colors">
+                <i data-lucide="package" class="w-4 h-4 text-emerald-400"></i>
+              </div>
+            </div>
+            <template x-if="loading">
+              <div class="skeleton h-8 w-16 mb-2"></div>
+            </template>
+            <template x-if="!loading">
+              <p class="kpi-value text-2xl font-bold text-white" x-text="kpi.products"></p>
+            </template>
+            <div class="mt-2 flex items-center gap-1.5">
+              <span class="flex items-center gap-0.5 text-xs font-medium text-red-400">
+                <i data-lucide="trending-down" class="w-3 h-3"></i> 2.1%
+              </span>
+              <span class="text-xs text-slate-600">vs last period</span>
+            </div>
+          </div>
+
+          <!-- Top Risk -->
+          <div class="glass rounded-xl p-4 hover:border-slate-700/60 transition-colors group border border-red-900/20">
+            <div class="flex items-start justify-between mb-3">
+              <p class="text-xs font-semibold text-slate-500 uppercase tracking-widest">Top Risk</p>
+              <div class="w-8 h-8 rounded-lg bg-red-500/10 group-hover:bg-red-500/20 flex items-center justify-center transition-colors">
+                <i data-lucide="shield-alert" class="w-4 h-4 text-red-400"></i>
+              </div>
+            </div>
+            <template x-if="loading">
+              <div class="skeleton h-8 w-16 mb-2"></div>
+            </template>
+            <template x-if="!loading">
+              <p class="kpi-value text-2xl font-bold text-white" x-text="kpi.topRisk"></p>
+            </template>
+            <div class="mt-2 flex items-center gap-1.5">
+              <span class="flex items-center gap-0.5 text-xs font-medium text-red-400">
+                <i data-lucide="trending-up" class="w-3 h-3"></i> 8.3%
+              </span>
+              <span class="text-xs text-slate-600">requires review</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── CHARTS ROW ─────────────────────────────────────────── -->
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+
+          <!-- Bar chart (2/3 width) -->
+          <div class="xl:col-span-2 glass rounded-xl p-5">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <h3 class="font-semibold text-slate-100">Risk Distribution</h3>
+                <p class="text-xs text-slate-500 mt-0.5">Vendor count by risk category</p>
+              </div>
+              <div class="flex items-center gap-1 bg-slate-800 rounded-lg p-0.5">
+                <button @click="chartType='bar'; buildBarChart()"
+                  :class="chartType==='bar' ? 'bg-slate-600 text-white' : 'text-slate-500 hover:text-slate-300'"
+                  class="px-3 py-1 rounded text-xs font-medium transition-all">Bar</button>
+                <button @click="chartType='area'; buildBarChart()"
+                  :class="chartType==='area' ? 'bg-slate-600 text-white' : 'text-slate-500 hover:text-slate-300'"
+                  class="px-3 py-1 rounded text-xs font-medium transition-all">Area</button>
+              </div>
+            </div>
+            <template x-if="loading">
+              <div class="skeleton h-48 w-full"></div>
+            </template>
+            <div id="barChart" :class="loading ? 'hidden' : ''"></div>
+          </div>
+
+          <!-- Donut chart (1/3 width) -->
+          <div class="glass rounded-xl p-5">
+            <div class="mb-3">
+              <h3 class="font-semibold text-slate-100">Risk Breakdown</h3>
+              <p class="text-xs text-slate-500 mt-0.5">Click a segment to filter the table</p>
+            </div>
+            <template x-if="loading">
+              <div class="skeleton h-40 w-40 rounded-full mx-auto mb-4"></div>
+            </template>
+            <div id="donutChart" :class="loading ? 'hidden' : ''"></div>
+
+            <!-- Legend -->
+            <div class="mt-2 space-y-2">
+              <template x-for="r in riskLegend" :key="r.label">
+                <button
+                  @click="setFilter(r.label)"
+                  :class="activeFilter === r.label ? 'bg-slate-700/80' : 'hover:bg-slate-800/50'"
+                  class="w-full flex items-center justify-between px-2 py-1.5 rounded-lg transition-colors"
+                >
+                  <div class="flex items-center gap-2">
+                    <div class="w-2 h-2 rounded-full" :style="`background:${r.color}`"></div>
+                    <span class="text-xs font-medium text-slate-400" x-text="r.label"></span>
+                  </div>
+                  <span class="text-xs font-bold text-slate-300" x-text="r.count"></span>
+                </button>
+              </template>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── DATA TABLE ──────────────────────────────────────────── -->
+        <div class="glass rounded-xl overflow-hidden">
+
+          <!-- Table toolbar -->
+          <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 border-b border-slate-800">
+            <div class="flex items-center gap-2">
+              <h3 class="font-semibold text-slate-100">Vendor Intelligence</h3>
+              <span class="text-xs text-slate-500 bg-slate-800 px-2 py-0.5 rounded-full" x-text="rowCount + ' rows'"></span>
+            </div>
+
+            <!-- Risk filter pills -->
+            <div class="flex items-center gap-2 flex-wrap">
+              <button
+                @click="setFilter('')"
+                :class="activeFilter === '' ? 'bg-slate-500 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'"
+                class="px-3 py-1 rounded-full text-xs font-semibold transition-all"
+              >All</button>
+              <template x-for="r in riskLegend" :key="r.label">
+                <button
+                  @click="setFilter(r.label)"
+                  :class="activeFilter === r.label
+                    ? 'risk-' + r.label + ' text-white shadow-md'
+                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700'"
+                  class="px-3 py-1 rounded-full text-xs font-semibold transition-all"
+                  x-text="r.label"
+                ></button>
+              </template>
+            </div>
+          </div>
+
+          <!-- AG Grid — virtual scroll handles all 3133 rows with zero lag -->
+          <template x-if="loading">
+            <div class="p-4 space-y-2">
+              <template x-for="i in 8" :key="i">
+                <div class="skeleton h-10 w-full" :style="`opacity:${1 - i * 0.1}`"></div>
+              </template>
+            </div>
+          </template>
+          <div id="vendorGrid" class="ag-theme-alpine-dark" style="height:440px;width:100%;" :class="loading ? 'hidden' : ''"></div>
+
+          <!-- Footer -->
+          <div class="flex items-center justify-between px-5 py-2.5 border-t border-slate-800 text-xs text-slate-600">
+            <span>Virtual scroll — all <span class="text-slate-400 font-medium" x-text="rowCount"></span> rows in memory, only visible rows rendered</span>
+            <span class="flex items-center gap-1"><i data-lucide="mouse-pointer-click" class="w-3 h-3"></i> Click a row for full details</span>
+          </div>
+        </div>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- ═══ DETAIL DRAWER ═══════════════════════════════════════════ -->
+  <div
+    :class="drawer ? 'drawer-open' : 'drawer-closed'"
+    class="drawer fixed inset-y-0 right-0 w-96 bg-slate-900 border-l border-slate-800 z-50 flex flex-col shadow-2xl overflow-hidden"
+  >
+    <div class="flex items-center justify-between px-5 py-4 border-b border-slate-800 flex-shrink-0">
+      <h2 class="font-semibold text-slate-100">Vendor Details</h2>
+      <button @click="drawer = false" class="p-1.5 rounded-lg text-slate-500 hover:bg-slate-800 hover:text-white transition-colors">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <div class="flex-1 overflow-y-auto p-4 space-y-3" x-show="row">
+      <!-- Risk badge + score -->
+      <div class="flex items-center gap-3">
+        <span
+          :class="'risk-' + (row?.SCORE_CATEGORY || '')"
+          class="px-3 py-1 rounded-full text-xs font-black text-white tracking-wider"
+          x-text="row?.SCORE_CATEGORY"
+        ></span>
+        <span class="text-sm text-slate-400">Score: <span class="text-white font-semibold" x-text="row?.RATING_SCORE"></span></span>
+        <span class="text-sm text-slate-400">Total: <span class="text-white font-semibold" x-text="row?.TOTAL_SCORE"></span></span>
+      </div>
+
+      <!-- Info blocks -->
+      <div class="bg-slate-800/50 rounded-xl p-4 space-y-3">
+        <div>
+          <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Product</p>
+          <p class="text-sm font-semibold text-slate-100" x-text="row?.PRODUCT_NAME"></p>
+        </div>
+        <div>
+          <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Vendor Platform</p>
+          <p class="text-sm font-semibold text-slate-100" x-text="row?.VENDOR_NAME"></p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div class="bg-slate-800/50 rounded-xl p-3">
+          <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Price</p>
+          <p class="text-base font-bold text-emerald-400" x-text="'$' + parseFloat(row?.PRODUCT_PRICE || 0).toFixed(2)"></p>
+        </div>
+        <div class="bg-slate-800/50 rounded-xl p-3">
+          <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Annual Sales</p>
+          <p class="text-base font-bold text-blue-400" x-text="fmtCurrency(row?.ANNUAL_SALES)"></p>
+        </div>
+      </div>
+
+      <div class="bg-slate-800/50 rounded-xl p-4 space-y-3">
+        <div>
+          <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Seller</p>
+          <p class="text-sm font-semibold text-slate-100" x-text="(row?.SELLER_FIRST_NAME || '') + ' ' + (row?.SELLER_LAST_NAME || '')"></p>
+          <p class="text-xs text-slate-500 mt-0.5" x-text="row?.SELLER_EMAIL"></p>
+          <p class="text-xs text-slate-500" x-text="row?.SELLER_PHONE"></p>
+        </div>
+        <div>
+          <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Location</p>
+          <p class="text-sm text-slate-300" x-text="(row?.STREET_NAME || '') + ', ' + (row?.CITY || '') + ', ' + (row?.STATE || '') + ' ' + (row?.ZIP_CODE || '')"></p>
+        </div>
+      </div>
+
+      <!-- Flags -->
+      <div class="grid grid-cols-3 gap-2">
+        <div :class="row?.SELLER_NAME_CHANGE ? 'border-amber-700/40 bg-amber-900/10' : 'border-slate-800'" class="rounded-xl p-2.5 border text-center">
+          <i :data-lucide="row?.SELLER_NAME_CHANGE ? 'alert-triangle' : 'check-circle'" :class="row?.SELLER_NAME_CHANGE ? 'text-amber-400' : 'text-slate-600'" class="w-4 h-4 mx-auto mb-1"></i>
+          <p class="text-[10px] text-slate-500">Name Change</p>
+        </div>
+        <div :class="row?.ARTICLE_FINDING ? 'border-red-700/40 bg-red-900/10' : 'border-slate-800'" class="rounded-xl p-2.5 border text-center">
+          <i :data-lucide="row?.ARTICLE_FINDING ? 'newspaper' : 'check-circle'" :class="row?.ARTICLE_FINDING ? 'text-red-400' : 'text-slate-600'" class="w-4 h-4 mx-auto mb-1"></i>
+          <p class="text-[10px] text-slate-500">Article Hit</p>
+        </div>
+        <div :class="row?.VERIFIED_COMPANY ? 'border-emerald-700/40 bg-emerald-900/10' : 'border-slate-800'" class="rounded-xl p-2.5 border text-center">
+          <i :data-lucide="row?.VERIFIED_COMPANY ? 'badge-check' : 'x-circle'" :class="row?.VERIFIED_COMPANY ? 'text-emerald-400' : 'text-slate-600'" class="w-4 h-4 mx-auto mb-1"></i>
+          <p class="text-[10px] text-slate-500">Verified</p>
+        </div>
+      </div>
+
+      <!-- Rating change -->
+      <div class="bg-slate-800/50 rounded-xl p-4">
+        <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Submit Rating Change</p>
+        <div class="flex gap-1.5 flex-wrap mb-3">
+          <button class="risk-TOP      px-2.5 py-1 rounded-full text-[10px] font-black text-white">TOP</button>
+          <button class="risk-HIGH     px-2.5 py-1 rounded-full text-[10px] font-black text-white">HIGH</button>
+          <button class="risk-MODERATE px-2.5 py-1 rounded-full text-[10px] font-black text-white">MODERATE</button>
+          <button class="risk-LOW      px-2.5 py-1 rounded-full text-[10px] font-black text-white">LOW</button>
+        </div>
+        <textarea
+          class="w-full bg-slate-700 border border-slate-600 rounded-lg p-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-none"
+          rows="3"
+          placeholder="Reason for rating change…"
+        ></textarea>
+        <button
+          @click="toast('Rating change submitted', 'success')"
+          class="mt-2 w-full bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold py-2 rounded-lg transition-colors"
+        >Submit Change</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Drawer backdrop -->
+  <div x-show="drawer" @click="drawer = false" class="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" style="display:none"></div>
+
+
+  <script>
+  function aim() {
+    return {
+      // ── state ─────────────────────────────────────
+      nav: true,
+      page: 'dashboard',
+      loading: true,
+      drawer: false,
+      filterOpen: false,
+      row: null,
+      query: '',
+      activeFilter: '',
+      chartType: 'bar',
+      rowCount: 0,
+      gridApi: null,
+      barChartInst: null,
+      donutChartInst: null,
+      allRows: [],
+
+      kpi: { volume: '$0', vendors: 0, products: 0, topRisk: 0 },
+
+      navItems: [
+        { id: 'dashboard', label: 'Dashboard',  icon: 'layout-dashboard' },
+        { id: 'settings',  label: 'Settings',   icon: 'settings-2' },
+        { id: 'accounts',  label: 'Accounts',   icon: 'users' },
+        { id: 'help',      label: 'Help',        icon: 'help-circle' },
+      ],
+
+      riskLegend: [
+        { label: 'TOP',      color: '#ef4444', count: 0 },
+        { label: 'HIGH',     color: '#f97316', count: 0 },
+        { label: 'MODERATE', color: '#eab308', count: 0 },
+        { label: 'LOW',      color: '#3b82f6', count: 0 },
+      ],
+
+      // ── boot ──────────────────────────────────────
+      async boot() {
+        this.initGrid();
+        this.initCharts();
+
+        // keyboard shortcut: '/' → focus search
+        document.addEventListener('keydown', e => {
+          if (e.key === '/' && !['INPUT','TEXTAREA'].includes(document.activeElement.tagName)) {
+            e.preventDefault();
+            this.$refs.search?.focus();
+          }
+          if (e.key === 'Escape') this.drawer = false;
+        });
+
+        await this.loadData('');
+        lucide.createIcons();
+      },
+
+      // ── AG Grid setup ──────────────────────────────
+      initGrid() {
+        const riskRenderer = p => {
+          if (!p.value) return '';
+          const c = { TOP:'#ef4444', HIGH:'#f97316', MODERATE:'#eab308', LOW:'#3b82f6' }[p.value] || '#64748b';
+          return `<span style="background:${c};color:#fff;padding:2px 10px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.05em">${p.value}</span>`;
+        };
+
+        const colDefs = [
+          { field:'SCORE_CATEGORY', headerName:'RATING',      width:120, cellRenderer:riskRenderer, pinned:'left', sortable:true, filter:false },
+          { field:'RATING_SCORE',   headerName:'SCORE',       width:85,  type:'numericColumn' },
+          { field:'VENDOR_NAME',    headerName:'VENDOR',      flex:1,    minWidth:130 },
+          { field:'SELLER_FIRST_NAME', headerName:'SELLER',   flex:1,    minWidth:130,
+            valueGetter: p => `${p.data.SELLER_FIRST_NAME||''} ${p.data.SELLER_LAST_NAME||''}`.trim() },
+          { field:'PRODUCT_NAME',   headerName:'PRODUCT',     flex:2,    minWidth:160 },
+          { field:'CITY',           headerName:'CITY',        width:120 },
+          { field:'STATE',          headerName:'STATE',       width:75 },
+          { field:'PRODUCT_PRICE',  headerName:'PRICE',       width:100, type:'numericColumn',
+            valueFormatter: p => p.value != null ? `$${parseFloat(p.value).toFixed(2)}` : '' },
+          { field:'ANNUAL_SALES',   headerName:'ANNUAL SALES',width:130, type:'numericColumn',
+            valueFormatter: p => p.value != null
+              ? new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',notation:'compact',maximumFractionDigits:1}).format(p.value)
+              : '' },
+        ];
+
+        const options = {
+          columnDefs: colDefs,
+          defaultColDef: { sortable:true, resizable:true, filter:true },
+          rowSelection: 'single',
+          animateRows: true,
+          suppressCellFocus: true,
+          onRowClicked: e => {
+            this.row = e.data;
+            this.drawer = true;
+            this.$nextTick(() => lucide.createIcons());
+          },
+        };
+
+        this.gridApi = agGrid.createGrid(document.getElementById('vendorGrid'), options);
+      },
+
+      // ── ApexCharts setup ───────────────────────────
+      initCharts() {
+        const dark = { mode:'dark', palette:'palette1' };
+
+        this.barChartInst = new ApexCharts(document.getElementById('barChart'), {
+          chart: { type:'bar', height:210, background:'transparent', toolbar:{show:false},
+            animations:{enabled:true, easing:'easeinout', speed:500} },
+          theme: dark,
+          series: [{ name:'Count', data:[0,0,0,0] }],
+          xaxis: { categories:['TOP','HIGH','MODERATE','LOW'], labels:{style:{colors:'#64748b',fontSize:'11px'}} },
+          yaxis: { labels:{style:{colors:'#64748b'}} },
+          colors: ['#ef4444','#f97316','#eab308','#3b82f6'],
+          plotOptions: { bar:{ distributed:true, borderRadius:6, columnWidth:'48%' } },
+          legend: { show:false },
+          grid: { borderColor:'#1e293b', strokeDashArray:3 },
+          dataLabels: { enabled:false },
+          tooltip: { theme:'dark' },
+        });
+        this.barChartInst.render();
+
+        this.donutChartInst = new ApexCharts(document.getElementById('donutChart'), {
+          chart: { type:'donut', height:180, background:'transparent',
+            events: {
+              dataPointSelection: (_e, _ctx, cfg) => {
+                const cats = ['TOP','HIGH','MODERATE','LOW'];
+                this.setFilter(cats[cfg.dataPointIndex]);
+              }
+            }
+          },
+          theme: dark,
+          series: [0,0,0,0],
+          labels: ['TOP','HIGH','MODERATE','LOW'],
+          colors: ['#ef4444','#f97316','#eab308','#3b82f6'],
+          legend: { show:false },
+          dataLabels: { enabled:false },
+          stroke: { show:false },
+          plotOptions: { pie:{ donut:{ size:'68%',
+            labels:{ show:true,
+              total:{ show:true, label:'Total', color:'#64748b', fontSize:'12px',
+                formatter: w => w.globals.seriesTotals.reduce((a,b)=>a+b,0) }
+            }
+          }}},
+          tooltip: { theme:'dark' },
+        });
+        this.donutChartInst.render();
+      },
+
+      // ── Data loading ───────────────────────────────
+      async loadData(riskLevel) {
+        this.loading = true;
+        try {
+          const [dataRes, kpiRes] = await Promise.all([
+            fetch(`/api/vendors?riskLevel=${encodeURIComponent(riskLevel)}`),
+            fetch(`/api/vendors/kpi?riskLevel=${encodeURIComponent(riskLevel)}`),
+          ]);
+          const { items } = await dataRes.json();
+          const { items: kpiItems } = await kpiRes.json();
+
+          this.allRows = items;
+          this.gridApi.setGridOption('rowData', items);
+          this.rowCount = items.length;
+
+          // counts
+          let top=0,high=0,mod=0,low=0,vol=0;
+          items.forEach(r => {
+            if      (r.SCORE_CATEGORY==='TOP')      top++;
+            else if (r.SCORE_CATEGORY==='HIGH')     high++;
+            else if (r.SCORE_CATEGORY==='MODERATE') mod++;
+            else if (r.SCORE_CATEGORY==='LOW')      low++;
+            vol += parseFloat(r.ANNUAL_SALES||0);
+          });
+
+          // KPI
+          let vendors=0, products=0;
+          kpiItems.forEach(r => { vendors+=r.DISTINCT_VENDOR_COUNT||0; products+=r.DISTINCT_PRODUCT_COUNT||0; });
+          this.kpi = {
+            volume:   this.fmtCurrency(vol),
+            vendors:  vendors,
+            products: products,
+            topRisk:  top,
+          };
+
+          // Charts
+          this.barChartInst.updateSeries([{data:[top,high,mod,low]}]);
+          this.donutChartInst.updateSeries([top,high,mod,low]);
+
+          // Legend
+          this.riskLegend[0].count = top;
+          this.riskLegend[1].count = high;
+          this.riskLegend[2].count = mod;
+          this.riskLegend[3].count = low;
+
+          this.loading = false;
+          this.$nextTick(() => lucide.createIcons());
+
+        } catch(e) {
+          this.loading = false;
+          this.toast('Failed to load data — is the server running?', 'error');
+        }
+      },
+
+      // ── Filters ────────────────────────────────────
+      setFilter(val) {
+        this.activeFilter = this.activeFilter === val ? '' : val;
+        this.loadData(this.activeFilter);
+      },
+
+      onSearch() {
+        // AG Grid quickFilter — instant client-side, no server round-trip needed
+        this.gridApi?.setGridOption('quickFilterText', this.query);
+      },
+
+      // ── Helpers ────────────────────────────────────
+      fmtCurrency(val) {
+        return new Intl.NumberFormat('en-US', {
+          style:'currency', currency:'USD',
+          notation:'compact', maximumFractionDigits:1
+        }).format(val||0);
+      },
+
+      buildBarChart() {
+        // swap bar ↔ area without full re-init
+        const counts = this.riskLegend.map(r => r.count);
+        this.barChartInst.updateOptions({ chart:{ type: this.chartType } });
+        this.barChartInst.updateSeries([{ data: counts }]);
+      },
+
+      // ── Toast notifications ────────────────────────
+      toast(msg, type='info') {
+        const bg  = { success:'bg-emerald-600', error:'bg-red-600', info:'bg-blue-600' }[type];
+        const ico = { success:'check-circle',   error:'alert-circle', info:'info' }[type];
+        const el  = document.createElement('div');
+        el.className = `toast-item flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium pointer-events-auto ${bg}`;
+        el.innerHTML = `<i data-lucide="${ico}" style="width:16px;height:16px;flex-shrink:0"></i><span>${msg}</span>`;
+        document.getElementById('toasts').prepend(el);
+        lucide.createIcons({ nodes:[el] });
+        setTimeout(() => el.remove(), 3500);
+      },
+    };
+  }
+  </script>
+
+</body>
+</html>
