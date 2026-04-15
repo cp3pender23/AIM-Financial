@@ -80,3 +80,21 @@ public record ImportPreviewResultDto(
     int ValidRows,
     int ErrorRows,
     IReadOnlyList<ImportPreviewRowDto> Sample);
+
+public record EntityRowDto(
+    string LinkId,
+    string? SubjectName,
+    int TransactionCount,
+    decimal? TotalAmount,
+    string? ActivityLocation,
+    string? ResidenceState,
+    DateTime? FirstTxDate,
+    DateTime? LastTxDate,
+    string RiskLevel);
+
+public record EntitySummaryDto(
+    int TotalEntities,
+    int TotalTransactions,
+    decimal? TotalAmount,
+    decimal? AverageTransaction,
+    int TopAndHighEntities);
