@@ -105,26 +105,72 @@
       <div class="text-sm font-semibold text-slate-200">FinCEN Monitor</div>
     </div>
 
-    <nav class="p-3 flex-1 overflow-y-auto">
-      <div class="text-[10px] uppercase tracking-widest text-slate-600 px-2 mb-2">Views</div>
-      <template x-for="v in views" :key="v.id">
-        <div class="nav-item" :class="{'active': view === v.id}" @@click="setView(v.id)">
-          <span x-text="v.label"></span>
-        </div>
-      </template>
+    <nav class="p-3 flex-1 overflow-y-auto space-y-4">
+      <div>
+        <div class="text-[10px] uppercase tracking-widest text-slate-600 px-2 mb-2">Entity</div>
+        <input x-model="filters.search" @@input.debounce.300ms="reload()" type="text"
+          placeholder="Search subject name…"
+          class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs placeholder-slate-600 focus:outline-none focus:border-blue-500" />
+      </div>
 
-      <div class="text-[10px] uppercase tracking-widest text-slate-600 px-2 mt-5 mb-2">Risk Tier</div>
-      <div class="flex flex-col gap-1">
-        <div class="tier-btn" :class="{'bg-slate-800': activeRisk === ''}" @@click="setRisk('')">
-          <span>All</span>
-          <span class="text-slate-500" x-text="kpi.total"></span>
-        </div>
-        <template x-for="t in ['TOP','HIGH','MODERATE','LOW']" :key="t">
-          <div class="tier-btn" :class="{'bg-slate-800': activeRisk === t}" @@click="setRisk(t)">
-            <span class="rb" :class="'rb-'+t" x-text="t"></span>
-            <span class="text-slate-500" x-text="kpi.byRisk[t] || 0"></span>
+      <div>
+        <div class="text-[10px] uppercase tracking-widest text-slate-600 px-2 mb-2">Residence Location</div>
+        <select x-model="filters.subjectState" @@change="reload()"
+          class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500">
+          <option value="">All states</option>
+          <template x-for="s in filterOpts.subjectStates" :key="s"><option :value="s" x-text="s"></option></template>
+        </select>
+      </div>
+
+      <div>
+        <div class="text-[10px] uppercase tracking-widest text-slate-600 px-2 mb-2">Activity Location</div>
+        <select x-model="filters.institutionState" @@change="reload()"
+          class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500">
+          <option value="">All states</option>
+          <template x-for="s in filterOpts.institutionStates" :key="s"><option :value="s" x-text="s"></option></template>
+        </select>
+      </div>
+
+      <div>
+        <div class="text-[10px] uppercase tracking-widest text-slate-600 px-2 mb-2">Transaction Type</div>
+        <select x-model="filters.transactionType" @@change="reload()"
+          class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500">
+          <option value="">All types</option>
+          <template x-for="t in filterOpts.transactionTypes" :key="t"><option :value="t" x-text="t"></option></template>
+        </select>
+      </div>
+
+      <div>
+        <div class="text-[10px] uppercase tracking-widest text-slate-600 px-2 mb-2">Risk Level</div>
+        <div class="flex flex-col gap-1">
+          <div class="tier-btn" :class="{'bg-slate-800': filters.riskLevel === ''}" @@click="filters.riskLevel=''; reload()">
+            <span>All</span>
           </div>
-        </template>
+          <template x-for="t in ['TOP','HIGH','MODERATE','LOW']" :key="t">
+            <div class="tier-btn" :class="{'bg-slate-800': filters.riskLevel === t}" @@click="filters.riskLevel=t; reload()">
+              <span class="rb" :class="'rb-'+t" x-text="t"></span>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <div>
+        <div class="text-[10px] uppercase tracking-widest text-slate-600 px-2 mb-2">Window</div>
+        <select x-model="filters.window" @@change="applyWindow(); reload()"
+          class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500">
+          <option value="90">Last 90 Days</option>
+          <option value="180">Last 180 Days</option>
+          <option value="365">Last Year</option>
+          <option value="all">All Time</option>
+        </select>
+      </div>
+
+      <div>
+        <div class="text-[10px] uppercase tracking-widest text-slate-600 px-2 mb-2">Date Range</div>
+        <input x-model="filters.dateFrom" @@change="reload()" type="date"
+          class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs mb-1 focus:outline-none focus:border-blue-500" />
+        <input x-model="filters.dateTo" @@change="reload()" type="date"
+          class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500" />
       </div>
     </nav>
 
@@ -142,9 +188,6 @@
         <p class="text-xs text-slate-500">Adaptive Intelligence Monitor · FinCEN analytics</p>
       </div>
       <div class="flex items-center gap-2">
-        <input x-model="search" @@input.debounce.300ms="reload()" type="text"
-          placeholder="Search subject name, BSA ID, or form type…"
-          class="bg-slate-900 border border-slate-800 rounded-md px-3 py-1.5 text-sm w-80 placeholder-slate-600 focus:outline-none focus:border-blue-500">
         <button @@click="exportCsv()" class="bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-md px-3 py-1.5 text-xs text-slate-300">Export CSV</button>
         @if (isAnalyst)
         {
@@ -157,22 +200,26 @@
       </div>
     </div>
 
-    <div class="grid grid-cols-4 gap-4 mb-5">
+    <div class="grid grid-cols-5 gap-3 mb-5">
       <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-        <div class="text-[10px] uppercase tracking-widest text-slate-500">Total Filings</div>
-        <div class="text-2xl font-semibold mt-1" x-text="kpi.total.toLocaleString()"></div>
+        <div class="text-[10px] uppercase tracking-widest text-slate-500">Total Entities</div>
+        <div class="text-2xl font-semibold mt-1" x-text="kpi.totalEntities.toLocaleString()"></div>
       </div>
       <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-        <div class="text-[10px] uppercase tracking-widest text-slate-500">TOP + HIGH Risk</div>
-        <div class="text-2xl font-semibold mt-1 text-orange-400" x-text="((kpi.byRisk.TOP||0)+(kpi.byRisk.HIGH||0)).toLocaleString()"></div>
+        <div class="text-[10px] uppercase tracking-widest text-slate-500">Total Transactions</div>
+        <div class="text-2xl font-semibold mt-1" x-text="kpi.totalTransactions.toLocaleString()"></div>
       </div>
       <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-        <div class="text-[10px] uppercase tracking-widest text-slate-500">Total Amount Under Suspicion</div>
+        <div class="text-[10px] uppercase tracking-widest text-slate-500">Total Amount</div>
         <div class="text-2xl font-semibold mt-1" x-text="fmtMoney(kpi.totalAmount)"></div>
       </div>
       <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-        <div class="text-[10px] uppercase tracking-widest text-slate-500">Amendments</div>
-        <div class="text-2xl font-semibold mt-1 text-blue-400" x-text="kpi.amendmentCount.toLocaleString()"></div>
+        <div class="text-[10px] uppercase tracking-widest text-slate-500">Avg Transaction</div>
+        <div class="text-2xl font-semibold mt-1" x-text="fmtMoney(kpi.averageTransaction)"></div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <div class="text-[10px] uppercase tracking-widest text-slate-500">TOP + HIGH Entities</div>
+        <div class="text-2xl font-semibold mt-1 text-orange-400" x-text="kpi.topAndHighEntities.toLocaleString()"></div>
       </div>
     </div>
 
@@ -189,7 +236,7 @@
 
     <div class="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
       <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
-        <div class="text-sm font-medium">BSA Filings <span class="text-slate-500 text-xs ml-2" x-text="'('+rows.length+' records)'"></span></div>
+        <div class="text-sm font-medium">Entities <span class="text-slate-500 text-xs ml-2" x-text="'('+rows.length+' records)'"></span></div>
       </div>
       <div id="grid" class="ag-theme-alpine-dark" style="height: 520px;"></div>
     </div>
@@ -205,9 +252,13 @@
     <div x-show="selected" class="flex flex-col h-full">
       <div class="px-5 py-4 border-b border-slate-800 flex items-start justify-between">
         <div class="flex-1">
-          <div class="text-[10px] uppercase tracking-widest text-slate-500">BSA Filing</div>
-          <div class="text-lg font-semibold mt-0.5" x-text="selected?.subjectName || '(unnamed subject)'"></div>
-          <div class="text-xs text-slate-500 mt-0.5" x-text="'BSA #' + (selected?.bsaId || '—')"></div>
+          <div class="text-[10px] uppercase tracking-widest text-slate-500">Entity</div>
+          <div class="text-lg font-semibold mt-0.5" x-text="selected?.subjectName || '(unnamed)'"></div>
+          <div class="flex items-center gap-2 mt-1">
+            <span class="inline-flex items-center gap-1 bg-slate-800 text-blue-300 font-mono text-xs px-2 py-0.5 rounded"
+              x-text="selected?.linkId === 'unlinked' ? '—' : selected?.linkId"></span>
+            <button @@click="copyLinkId()" class="text-slate-500 hover:text-blue-300 text-xs">⧉ Copy</button>
+          </div>
         </div>
         <button @@click="closeDrawer()" class="text-slate-500 hover:text-slate-200 text-xl leading-none">×</button>
       </div>
@@ -222,43 +273,42 @@
         <div x-show="tab==='overview'" class="space-y-3">
           <div class="flex items-center gap-3">
             <span class="rb" :class="'rb-'+selected?.riskLevel" x-text="selected?.riskLevel"></span>
-            <span class="sb" :class="'sb-'+selected?.status" x-text="selected?.status"></span>
-            <span x-show="selected?.isAmendment" class="text-xs text-blue-400">Amendment</span>
+            <span class="text-xs text-slate-500" x-text="(selected?.transactionCount || 0) + ' filings'"></span>
           </div>
           <dl class="grid grid-cols-2 gap-y-2 gap-x-4 text-xs">
-            <dt class="text-slate-500">Form Type</dt><dd x-text="selected?.formType"></dd>
-            <dt class="text-slate-500">Filing Date</dt><dd x-text="fmtDate(selected?.filingDate)"></dd>
-            <dt class="text-slate-500">Transaction Date</dt><dd x-text="fmtDate(selected?.transactionDate)"></dd>
-            <dt class="text-slate-500">Amount Total</dt><dd x-text="fmtMoney(selected?.amountTotal)"></dd>
-            <dt class="text-slate-500">Activity Type</dt><dd x-text="selected?.suspiciousActivityType || '—'"></dd>
-            <dt class="text-slate-500">Transaction Type</dt><dd x-text="selected?.transactionType || '—'"></dd>
-            <dt class="text-slate-500">Subject State</dt><dd x-text="selected?.subjectState || '—'"></dd>
             <dt class="text-slate-500">Subject DOB</dt><dd x-text="selected?.subjectDob || '—'"></dd>
             <dt class="text-slate-500">EIN/SSN (masked)</dt><dd x-text="maskSsn(selected?.subjectEinSsn)"></dd>
+            <dt class="text-slate-500">Total Amount</dt><dd x-text="fmtMoney(selected?.totalAmount)"></dd>
+            <dt class="text-slate-500">Latest Form Type</dt><dd x-text="selected?.formType || '—'"></dd>
+            <dt class="text-slate-500">Latest Filing Date</dt><dd x-text="fmtDate(selected?.filingDate)"></dd>
+            <dt class="text-slate-500">Latest BSA ID</dt><dd x-text="selected?.bsaId || '—'"></dd>
             <dt class="text-slate-500">Zip3</dt><dd x-text="selected?.zip3 || '—'"></dd>
           </dl>
           <div class="mt-4 p-3 rounded-md bg-red-950/30 border border-red-900/40 text-[11px] text-red-300">
             CONFIDENTIAL — SAR disclosure is prohibited under 31 USC 5318(g)(2).
           </div>
-          <button @@click="downloadPdf()" class="mt-2 bg-slate-800 hover:bg-slate-700 rounded-md px-3 py-1.5 text-xs">Download PDF</button>
         </div>
 
         <div x-show="tab==='transactions'" class="space-y-3">
-          <div class="text-xs text-slate-500" x-text="'Recent 20 filings for ' + (subjectDetails?.subjectName || '—')"></div>
+          <div class="text-xs text-slate-500" x-text="'All ' + (entityFilings.length || 0) + ' filings for this entity'"></div>
           <table class="w-full text-xs">
             <thead><tr class="text-slate-500 text-[10px] uppercase tracking-widest">
               <th class="text-left py-1">Date</th>
+              <th class="text-left py-1">BSA ID</th>
               <th class="text-left py-1">Form</th>
               <th class="text-right py-1">Amount</th>
               <th class="text-left py-1">Risk</th>
+              <th class="text-left py-1">PDF</th>
             </tr></thead>
             <tbody>
-              <template x-for="t in (subjectDetails?.recentTransactions || [])" :key="t.id">
+              <template x-for="f in entityFilings" :key="f.id">
                 <tr class="border-t border-slate-800">
-                  <td class="py-1.5" x-text="fmtDate(t.filingDate)"></td>
-                  <td x-text="t.formType"></td>
-                  <td class="text-right" x-text="fmtMoney(t.amountTotal)"></td>
-                  <td><span class="rb" :class="'rb-'+t.riskLevel" x-text="t.riskLevel"></span></td>
+                  <td class="py-1.5" x-text="fmtDate(f.filingDate)"></td>
+                  <td class="font-mono text-[11px] text-slate-400" x-text="f.bsaId"></td>
+                  <td x-text="f.formType"></td>
+                  <td class="text-right" x-text="fmtMoney(f.amountTotal)"></td>
+                  <td><span class="rb" :class="'rb-'+f.riskLevel" x-text="f.riskLevel"></span></td>
+                  <td><button @@click="downloadPdf(f.id)" class="text-blue-400 hover:underline text-xs">PDF</button></td>
                 </tr>
               </template>
             </tbody>
@@ -267,39 +317,18 @@
             <div class="text-[10px] uppercase tracking-widest text-slate-500 mb-2">Activity Over Time</div>
             <div id="chart-subject"></div>
           </div>
-          <div class="mt-4">
-            <div class="text-[10px] uppercase tracking-widest text-slate-500 mb-2">Related Subjects (same EIN/SSN + DOB hash)</div>
-            <div x-show="!relatedSubjects.length" class="text-xs text-slate-500">No linked subjects.</div>
-            <template x-for="r in relatedSubjects" :key="r.id">
-              <div class="text-xs border-t border-slate-800 py-1.5 flex justify-between">
-                <span x-text="r.subjectName + ' · ' + r.bsaId"></span>
-                <span class="text-slate-500" x-text="fmtDate(r.filingDate)"></span>
-              </div>
-            </template>
-          </div>
         </div>
 
         <div x-show="tab==='institution'" class="space-y-2 text-xs">
           <dl class="grid grid-cols-2 gap-y-2 gap-x-4">
-            <dt class="text-slate-500">Institution Type</dt><dd x-text="selected?.institutionType || '—'"></dd>
-            <dt class="text-slate-500">Institution State</dt><dd x-text="selected?.institutionState || '—'"></dd>
-            <dt class="text-slate-500">Regulator</dt><dd x-text="selected?.regulator || '—'"></dd>
-            <dt class="text-slate-500">Latest Filing</dt><dd x-text="selected?.latestFiling"></dd>
-            <dt class="text-slate-500">Receipt Date</dt><dd x-text="fmtDate(selected?.receiptDate)"></dd>
-            <dt class="text-slate-500">FinCEN Filing #</dt><dd x-text="selected?.finCenFilingNumber || '—'"></dd>
+            <dt class="text-slate-500">Latest Institution Type</dt><dd x-text="selected?.institutionType || '—'"></dd>
+            <dt class="text-slate-500">Latest Institution State</dt><dd x-text="selected?.institutionState || '—'"></dd>
+            <dt class="text-slate-500">Latest Regulator</dt><dd x-text="selected?.regulator || '—'"></dd>
           </dl>
         </div>
 
         <div x-show="tab==='transitions'" class="space-y-2">
-          <div class="text-xs text-slate-500">Allowed next states based on your role and current status.</div>
-          <div class="flex gap-2 flex-wrap">
-            <template x-for="nx in legalNext(selected?.status)" :key="nx">
-              <button @@click="transition(nx)"
-                class="bg-slate-800 hover:bg-slate-700 rounded-md px-3 py-1.5 text-xs"
-                x-text="nx"></button>
-            </template>
-            <div x-show="legalNext(selected?.status).length===0" class="text-xs text-slate-600">No transitions available.</div>
-          </div>
+          <div class="text-xs text-slate-500">Filing transitions are done from the <a href="/Filing" class="text-blue-400 hover:underline">Filing Queue</a> on a per-filing basis. Select an individual filing in the Transactions tab and use the PDF link for its full detail.</div>
         </div>
       </div>
     </div>
@@ -321,58 +350,85 @@
 
   function aim() {
     return {
+      // Views reduced — Geographic becomes part of the default dashboard
       views: [
         {id:'overview', label:'Overview'},
-        {id:'filings',  label:'Filings'},
-        {id:'subjects', label:'Subjects'},
         {id:'geographic', label:'Geographic'},
       ],
       view: 'overview',
-      rows: [],
-      activeRisk: '',
-      search: '',
-      kpi: { total: 0, byRisk: {}, totalAmount: 0, amendmentCount: 0 },
+
+      rows: [],                    // entity rows from /api/entities
+      kpi: {
+        totalEntities: 0, totalTransactions: 0, totalAmount: 0,
+        averageTransaction: 0, topAndHighEntities: 0
+      },
+      filterOpts: { subjectStates: [], institutionStates: [], transactionTypes: [] },
+      filters: {
+        search: '', subjectState: '', institutionState: '',
+        transactionType: '', riskLevel: '',
+        window: '90', dateFrom: '', dateTo: ''
+      },
+
       drawerOpen: false,
-      selected: null,
-      subjectDetails: null,
-      relatedSubjects: [],
+      selected: null,              // first filing in the entity group (used for the default detail view)
+      entityFilings: [],           // all filings for the open entity
       tab: 'overview',
       toasts: [],
       toastId: 0,
-      isAdmin: @(isAdmin ? "true" : "false"),
-      isAnalyst: @(isAnalyst ? "true" : "false"),
+
+      isAdmin: @(User.IsInRole("Admin") ? "true" : "false"),
+      isAnalyst: @(User.IsInRole("Analyst") || User.IsInRole("Admin") ? "true" : "false"),
 
       async init() {
+        this.applyWindow();
+        await this.loadFilterOpts();
         await this.reload();
         this.buildGrid();
       },
 
+      applyWindow() {
+        const w = this.filters.window;
+        if (w === 'all') { this.filters.dateFrom = ''; this.filters.dateTo = ''; return; }
+        const days = parseInt(w, 10);
+        const now = new Date();
+        const from = new Date(now);
+        from.setDate(from.getDate() - days);
+        const iso = d => d.toISOString().slice(0, 10);
+        this.filters.dateFrom = iso(from);
+        this.filters.dateTo = iso(now);
+      },
+
       setView(v) { this.view = v; if (v === 'geographic') this.$nextTick(() => this.ensureMap()); },
-      setRisk(r) { this.activeRisk = r; this.reload(); },
 
       queryString() {
         const p = new URLSearchParams();
-        if (this.activeRisk) p.set('riskLevel', this.activeRisk);
-        if (this.search) p.set('search', this.search);
-        p.set('limit', '1000');
+        if (this.filters.search) p.set('search', this.filters.search);
+        if (this.filters.subjectState) p.set('subjectState', this.filters.subjectState);
+        if (this.filters.institutionState) p.set('institutionState', this.filters.institutionState);
+        if (this.filters.transactionType) p.set('transactionType', this.filters.transactionType);
+        if (this.filters.riskLevel) p.set('riskLevel', this.filters.riskLevel);
+        if (this.filters.dateFrom) p.set('dateFrom', this.filters.dateFrom);
+        if (this.filters.dateTo) p.set('dateTo', this.filters.dateTo);
         return p.toString();
+      },
+
+      async loadFilterOpts() {
+        const r = await fetch('/api/filters').then(x => x.json());
+        this.filterOpts.subjectStates = r.subjectStates || [];
+        this.filterOpts.institutionStates = r.institutionStates || [];
+        this.filterOpts.transactionTypes = r.transactionTypes || [];
       },
 
       async reload() {
         const qs = this.queryString();
-        const [records, summary, risk, states] = await Promise.all([
-          fetch('/api/records?' + qs).then(r => r.json()),
-          fetch('/api/summary?' + qs).then(r => r.json()),
+        const [rows, summary, risk, states] = await Promise.all([
+          fetch('/api/entities?' + qs).then(r => r.json()),
+          fetch('/api/entity-summary?' + qs).then(r => r.json()),
           fetch('/api/risk-amounts?' + qs).then(r => r.json()),
           fetch('/api/filings-by-state?' + qs).then(r => r.json()),
         ]);
-        this.rows = records;
-        this.kpi = {
-          total: summary.totalReports,
-          byRisk: summary.byRiskLevel || {},
-          totalAmount: summary.totalAmount || 0,
-          amendmentCount: summary.amendmentCount || 0,
-        };
+        this.rows = rows;
+        this.kpi = summary;
         if (_g) _g.setGridOption('rowData', this.rows);
         this.renderCharts(risk, states);
       },
@@ -380,27 +436,55 @@
       buildGrid() {
         const el = document.getElementById('grid');
         const defs = [
-          { headerName:'Subject', field:'subjectName', flex:1.5, minWidth:160 },
-          { headerName:'BSA ID',  field:'bsaId', width:150 },
-          { headerName:'Form',    field:'formType', width:90 },
-          { headerName:'Filing Date', field:'filingDate', width:120,
-            valueFormatter: p => this.fmtDate(p.value) },
-          { headerName:'Amount', field:'amountTotal', width:130, type:'rightAligned',
-            valueFormatter: p => this.fmtMoney(p.value) },
-          { headerName:'Risk', field:'riskLevel', width:110,
-            cellRenderer: p => `<span class="rb rb-${p.value}">${p.value}</span>` },
-          { headerName:'Status', field:'status', width:130,
-            cellRenderer: p => `<span class="sb sb-${p.value}">${p.value}</span>` },
-          { headerName:'Inst. State', field:'institutionState', width:100 },
-          { headerName:'Regulator', field:'regulator', width:150 },
-          { headerName:'Amendment', field:'isAmendment', width:100,
-            valueFormatter: p => p.value === true ? '✓' : p.value === false ? '' : '' },
+          {
+            headerName: 'Link ID', field: 'linkId', width: 150, sortable: true,
+            cellRenderer: p => {
+              const v = p.value || '';
+              const isUnlinked = v === 'unlinked';
+              const label = isUnlinked ? '—' : v;
+              const pill = `<span class="inline-flex items-center gap-1 bg-slate-800 text-blue-300 font-mono text-xs px-2 py-0.5 rounded">${label}</span>`;
+              const copy = isUnlinked ? '' : `<button data-copy="${v}" title="Copy Link ID" class="ml-1 text-slate-500 hover:text-blue-300 text-xs">⧉</button>`;
+              return pill + copy;
+            }
+          },
+          { headerName: 'Subject', field: 'subjectName', flex: 1.4, minWidth: 180 },
+          { headerName: 'Transactions', field: 'transactionCount', width: 120, type: 'rightAligned' },
+          {
+            headerName: 'Total Amount', field: 'totalAmount', width: 140, type: 'rightAligned',
+            valueFormatter: p => this.fmtMoney(p.value)
+          },
+          { headerName: 'Activity', field: 'activityLocation', width: 100 },
+          {
+            headerName: 'First Tx', field: 'firstTxDate', width: 120,
+            valueFormatter: p => this.fmtDate(p.value)
+          },
+          {
+            headerName: 'Last Tx', field: 'lastTxDate', width: 120,
+            valueFormatter: p => this.fmtDate(p.value)
+          },
+          {
+            headerName: 'Risk', field: 'riskLevel', width: 110,
+            cellRenderer: p => `<span class="rb rb-${p.value}">${p.value}</span>`
+          },
         ];
         _g = agGrid.createGrid(el, {
           columnDefs: defs,
           rowData: this.rows,
-          defaultColDef: { sortable:true, resizable:true, filter:true },
-          onRowClicked: e => this.openRow(e.data),
+          defaultColDef: { sortable: true, resizable: true, filter: true },
+          pagination: true,
+          paginationPageSize: 25,
+          paginationPageSizeSelector: [10, 15, 25, 50],
+          onCellClicked: e => {
+            // If the copy button was clicked, copy and stop — don't open modal.
+            const tgt = e.event && e.event.target;
+            if (tgt && tgt.dataset && tgt.dataset.copy) {
+              navigator.clipboard.writeText(tgt.dataset.copy);
+              this.toast('success', 'Copied ' + tgt.dataset.copy);
+              e.event.stopPropagation();
+              return;
+            }
+            this.openEntity(e.data);
+          },
           rowSelection: 'single',
         });
       },
@@ -446,26 +530,34 @@
         setTimeout(() => _map.invalidateSize(), 50);
       },
 
-      async openRow(r) {
-        this.selected = r;
+      async openEntity(row) {
         this.drawerOpen = true;
         this.tab = 'overview';
-        this.subjectDetails = null;
-        this.relatedSubjects = [];
-        if (r.subjectName) {
-          const d = await fetch('/api/subject-details?subject=' + encodeURIComponent(r.subjectName)).then(x => x.ok ? x.json() : null);
-          this.subjectDetails = d;
-          this.renderSubjectChart(d);
-          if (d?.linkId) {
-            const rel = await fetch('/api/bsa-reports/subjects/' + d.linkId).then(x => x.json());
-            this.relatedSubjects = rel.filter(x => x.id !== r.id);
-          }
+        this.entityFilings = [];
+        this.selected = { linkId: row.linkId, subjectName: row.subjectName,
+                          riskLevel: row.riskLevel, transactionCount: row.transactionCount,
+                          totalAmount: row.totalAmount };
+        const list = await fetch('/api/bsa-reports/subjects/' + encodeURIComponent(row.linkId))
+          .then(x => x.ok ? x.json() : []);
+        this.entityFilings = list;
+        // Populate selected with the most recent filing's detail fields for the Overview tab
+        if (list.length) {
+          const r = list[0];
+          this.selected = { ...this.selected,
+            formType: r.formType, filingDate: r.filingDate, transactionDate: r.transactionDate,
+            subjectState: r.subjectState, subjectDob: r.subjectDob, subjectEinSsn: r.subjectEinSsn,
+            amountTotal: r.amountTotal, suspiciousActivityType: r.suspiciousActivityType,
+            transactionType: r.transactionType, institutionType: r.institutionType,
+            institutionState: r.institutionState, regulator: r.regulator, status: r.status,
+            zip3: r.zip3, bsaId: r.bsaId, finCenFilingNumber: r.finCenFilingNumber,
+            isAmendment: r.isAmendment, latestFiling: r.latestFiling, receiptDate: r.receiptDate
+          };
+          this.renderSubjectChart(list);
         }
       },
 
-      renderSubjectChart(d) {
-        if (!d?.recentTransactions?.length) return;
-        const pts = d.recentTransactions
+      renderSubjectChart(filings) {
+        const pts = filings
           .filter(t => t.filingDate && t.amountTotal != null)
           .map(t => ({ x: new Date(t.filingDate).getTime(), y: Number(t.amountTotal) }))
           .sort((a, b) => a.x - b.x);
@@ -486,41 +578,17 @@
         });
       },
 
-      closeDrawer() { this.drawerOpen = false; this.selected = null; },
+      closeDrawer() { this.drawerOpen = false; this.selected = null; this.entityFilings = []; },
 
-      legalNext(status) {
-        const transitions = {
-          Draft: ['PendingReview'],
-          PendingReview: this.isAdmin ? ['Approved','Rejected'] : [],
-          Approved: this.isAdmin ? ['Submitted'] : [],
-          Submitted: [],
-          Rejected: ['Draft'],
-          Acknowledged: [],
-        };
-        return transitions[status] || [];
+      copyLinkId() {
+        if (!this.selected?.linkId) return;
+        navigator.clipboard.writeText(this.selected.linkId);
+        this.toast('success', 'Copied ' + this.selected.linkId);
       },
 
-      async transition(target) {
-        const id = this.selected?.id;
+      async downloadPdf(id) {
         if (!id) return;
-        const resp = await fetch(`/api/bsa-reports/${id}/transition`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ target, reason: null })
-        });
-        if (resp.ok) {
-          this.selected = await resp.json();
-          this.toast('success', `Transitioned to ${target}`);
-          this.reload();
-        } else {
-          const err = await resp.json().catch(() => ({ error: resp.statusText }));
-          this.toast('error', err.error || 'Transition failed');
-        }
-      },
-
-      async downloadPdf() {
-        if (!this.selected?.id) return;
-        window.location.href = `/api/bsa-reports/${this.selected.id}/export.pdf`;
+        window.location.href = `/api/bsa-reports/${id}/export.pdf`;
       },
 
       exportCsv() {
@@ -530,7 +598,7 @@
       toast(kind, msg) {
         const id = ++this.toastId;
         this.toasts.push({ id, kind, msg });
-        setTimeout(() => this.toasts = this.toasts.filter(t => t.id !== id), 3500);
+        setTimeout(() => this.toasts = this.toasts.filter(t => t.id !== id), 1500);
       },
 
       fmtMoney(m) {
