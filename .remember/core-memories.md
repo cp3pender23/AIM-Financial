@@ -162,3 +162,13 @@ Seeded in `Program.cs:SeedRolesAndUsersAsync` on startup. Rotate or remove for p
 - `database/seed/bsa_mock_data_500.csv` (from AIM-Codex repo).
 - Known distribution: 500 rows, 91 unique subjects, TOP=18 / HIGH=78 / MODERATE=135 / LOW=269, $6,825,085.33 total, 25 amendments.
 - Use these numbers as integration-test anchors.
+
+---
+
+## Entity-centric dashboard pivot — 2026-04-15
+
+**Decision**: The main dashboard (`Pages/Index.cshtml`) groups filings by Link ID (one row per entity, ~91 rows) instead of showing 500 individual filings. "BSA ID" is removed from the main grid and only appears inside the modal's Transactions tab. The Filing Queue (`/Filing`) remains filing-centric.
+
+**Why**: Matches the reference design at `aim-financial.netlify.app`. Investigators triage by subject, not by individual filing — grouping by Link ID (SHA-256 of `subject_ein_ssn + "|" + subject_dob`) lets the same person surface once even when their name appears with different punctuation.
+
+**Impact**: If you ever need to show filing-centric data in the main view again, `GET /api/records` still returns it — only the Razor Page needs reverting. Filings with null EIN/SSN AND null DOB roll into one synthetic row whose `linkId` is the literal string `"unlinked"`; pass that same string to `/api/bsa-reports/subjects/{linkId}` to retrieve them.
