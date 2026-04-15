@@ -13,6 +13,33 @@ public class BsaReportService(AimDbContext db, IAuditLogger audit, IFinCenClient
         : d.Value.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(d.Value, DateTimeKind.Utc)
         : d.Value.ToUniversalTime();
 
+    private static readonly Dictionary<string, int> RiskRank = new()
+    {
+        ["TOP"] = 4, ["HIGH"] = 3, ["MODERATE"] = 2, ["LOW"] = 1
+    };
+
+    private static string HighestRisk(IEnumerable<string> levels)
+    {
+        string best = "LOW";
+        int bestRank = 0;
+        foreach (var l in levels)
+        {
+            if (RiskRank.TryGetValue(l, out var r) && r > bestRank) { best = l; bestRank = r; }
+        }
+        return best;
+    }
+
+    private static string? Mode(IEnumerable<string?> values)
+    {
+        return values
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .GroupBy(v => v)
+            .OrderByDescending(g => g.Count())
+            .ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.Key)
+            .FirstOrDefault();
+    }
+
     public IQueryable<BsaReport> ApplyFilters(IQueryable<BsaReport> q, IQueryCollection qs)
     {
         string? S(string k) => qs.TryGetValue(k, out var v) ? v.ToString() : null;
@@ -171,10 +198,22 @@ public class BsaReportService(AimDbContext db, IAuditLogger audit, IFinCenClient
 
     public async Task<IReadOnlyList<BsaReport>> GetSubjectsByLinkIdAsync(string linkId, CancellationToken ct)
     {
+        if (linkId == "unlinked")
+        {
+            return await db.BsaReports.AsNoTracking()
+                .Where(x => (x.SubjectEinSsn == null || x.SubjectEinSsn == "")
+                         && (x.SubjectDob == null || x.SubjectDob == ""))
+                .OrderByDescending(x => x.FilingDate)
+                .ToListAsync(ct);
+        }
+
         var all = await db.BsaReports.AsNoTracking()
             .Where(x => x.SubjectEinSsn != null || x.SubjectDob != null)
             .ToListAsync(ct);
-        return all.Where(r => LinkAnalysis.BuildLinkId(r.SubjectEinSsn, r.SubjectDob) == linkId).ToList();
+        return all
+            .Where(r => LinkAnalysis.BuildLinkId(r.SubjectEinSsn, r.SubjectDob) == linkId)
+            .OrderByDescending(r => r.FilingDate)
+            .ToList();
     }
 
     public async Task<BsaReport> CreateDraftAsync(CreateBsaReportDto dto, string userId, CancellationToken ct)
@@ -306,4 +345,62 @@ public class BsaReportService(AimDbContext db, IAuditLogger audit, IFinCenClient
             .OrderByDescending(x => x.UpdatedAt)
             .Take(500)
             .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<EntityRowDto>> GetEntitiesAsync(IQueryCollection query, CancellationToken ct)
+    {
+        var filings = await ApplyFilters(db.BsaReports.AsNoTracking(), query).ToListAsync(ct);
+
+        var groups = filings
+            .GroupBy(f => LinkAnalysis.BuildLinkId(f.SubjectEinSsn, f.SubjectDob))
+            .Select(g =>
+            {
+                var isUnlinked = g.Key is null;
+                var linkId = g.Key ?? "unlinked";
+                var ordered = g.OrderByDescending(x => x.FilingDate).ToList();
+                return new EntityRowDto(
+                    LinkId: linkId,
+                    SubjectName: isUnlinked ? "— Unlinked filings —" : ordered.First().SubjectName,
+                    TransactionCount: g.Count(),
+                    TotalAmount: g.Sum(x => x.AmountTotal ?? 0m),
+                    ActivityLocation: Mode(g.Select(x => x.InstitutionState)),
+                    ResidenceState: Mode(g.Select(x => x.SubjectState)),
+                    FirstTxDate: g.Min(x => x.FilingDate),
+                    LastTxDate: g.Max(x => x.FilingDate),
+                    RiskLevel: HighestRisk(g.Select(x => x.RiskLevel))
+                );
+            })
+            .OrderByDescending(r => r.TransactionCount)
+            .ThenByDescending(r => r.TotalAmount)
+            .ToList();
+
+        return groups;
+    }
+
+    public async Task<EntitySummaryDto> GetEntitySummaryAsync(IQueryCollection query, CancellationToken ct)
+    {
+        var filings = await ApplyFilters(db.BsaReports.AsNoTracking(), query).ToListAsync(ct);
+
+        var groups = filings
+            .GroupBy(f => LinkAnalysis.BuildLinkId(f.SubjectEinSsn, f.SubjectDob) ?? "unlinked")
+            .Select(g => new
+            {
+                LinkId = g.Key,
+                Count = g.Count(),
+                Total = g.Sum(x => x.AmountTotal ?? 0m),
+                Risk = HighestRisk(g.Select(x => x.RiskLevel))
+            })
+            .ToList();
+
+        var totalTx = filings.Count;
+        var totalAmt = filings.Sum(x => x.AmountTotal ?? 0m);
+        var avg = totalTx > 0 ? totalAmt / totalTx : (decimal?)null;
+
+        return new EntitySummaryDto(
+            TotalEntities: groups.Count,
+            TotalTransactions: totalTx,
+            TotalAmount: totalAmt == 0 ? null : totalAmt,
+            AverageTransaction: avg,
+            TopAndHighEntities: groups.Count(g => g.Risk is "TOP" or "HIGH")
+        );
+    }
 }
