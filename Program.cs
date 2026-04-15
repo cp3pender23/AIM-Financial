@@ -278,17 +278,21 @@ static async Task SeedBsaReportsIfEmptyAsync(IServiceProvider sp, IWebHostEnviro
 
     if (reports.Count == 0) return;
 
-    await using var tx = await db.Database.BeginTransactionAsync();
-    db.BsaReports.AddRange(reports);
-    await db.SaveChangesAsync();
-    db.AuditLog.Add(new AuditLogEntry
+    var strategy = db.Database.CreateExecutionStrategy();
+    await strategy.ExecuteAsync(async () =>
     {
-        Action = AuditAction.ImportBatch,
-        EntityType = nameof(BsaReport),
-        ActorDisplayName = "system",
-        NewValuesJson = $"{{\"seed\":\"bsa_mock_data_500.csv\",\"count\":{reports.Count}}}",
-        CreatedAt = DateTime.UtcNow,
+        await using var tx = await db.Database.BeginTransactionAsync();
+        db.BsaReports.AddRange(reports);
+        await db.SaveChangesAsync();
+        db.AuditLog.Add(new AuditLogEntry
+        {
+            Action = AuditAction.ImportBatch,
+            EntityType = nameof(BsaReport),
+            ActorDisplayName = "system",
+            NewValuesJson = $"{{\"seed\":\"bsa_mock_data_500.csv\",\"count\":{reports.Count}}}",
+            CreatedAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
+        await tx.CommitAsync();
     });
-    await db.SaveChangesAsync();
-    await tx.CommitAsync();
 }
