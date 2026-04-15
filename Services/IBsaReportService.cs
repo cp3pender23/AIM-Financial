@@ -14,6 +14,10 @@ public interface IBsaReportService
     Task<SubjectDetailsDto?> GetSubjectDetailsAsync(string subject, CancellationToken ct);
     Task<IReadOnlyList<BsaReport>> GetRecentRecordsAsync(IQueryCollection query, CancellationToken ct);
     Task<IReadOnlyList<ByStateDto>> GetFilingsByStateAsync(IQueryCollection query, CancellationToken ct);
+    /// <summary>
+    /// Returns all filings sharing the 6-char linkId hash. Pass the literal "unlinked"
+    /// to get all filings whose computed hash would be null (missing EIN/SSN AND DOB).
+    /// </summary>
     Task<IReadOnlyList<BsaReport>> GetSubjectsByLinkIdAsync(string linkId, CancellationToken ct);
 
     Task<BsaReport> CreateDraftAsync(CreateBsaReportDto dto, string userId, CancellationToken ct);
@@ -21,4 +25,7 @@ public interface IBsaReportService
     Task<BsaReport?> TransitionAsync(long id, TransitionDto dto, string userId, IReadOnlyList<string> roles, CancellationToken ct);
     Task<BsaReport?> GetByIdAsync(long id, CancellationToken ct);
     Task<IReadOnlyList<BsaReport>> GetQueueAsync(string status, CancellationToken ct);
+
+    Task<IReadOnlyList<EntityRowDto>> GetEntitiesAsync(IQueryCollection query, CancellationToken ct);
+    Task<EntitySummaryDto> GetEntitySummaryAsync(IQueryCollection query, CancellationToken ct);
 }
