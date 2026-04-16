@@ -1,0 +1,12 @@
+@page
+@model LogoutModel
+@{ Layout = null; }
+@*
+    This page never renders. Both GET and POST call SignOutAsync and redirect
+    straight to /Identity/Account/Login. Razor still requires a .cshtml file
+    paired with the PageModel; a minimal DOCTYPE body is rendered only if the
+    redirect is somehow interrupted.
+*@
+<!DOCTYPE html>
+<html><head><title>Signing out…</title><meta http-equiv="refresh" content="0;url=/Identity/Account/Login" /></head>
+<body>Signing out…</body></html>
