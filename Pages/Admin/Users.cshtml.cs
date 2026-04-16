@@ -30,6 +30,7 @@ public class UsersModel : PageModel
 
     public string DisplayName { get; private set; } = "Guest";
     public string CurrentUserId { get; private set; } = "";
+    public bool CallerIsSuperAdmin { get; private set; }
 
     public async Task<IActionResult> OnGetAsync()
     {
@@ -37,6 +38,7 @@ public class UsersModel : PageModel
         if (!eff.IsAdmin) return Redirect("/");
 
         DisplayName = User.Identity?.Name ?? "Admin";
+        CallerIsSuperAdmin = eff.IsSuperAdmin;
 
         // Stamp the review timestamp so the badge count zeros out. Swallow
         // any ConcurrencyException — losing a single badge-reset write is

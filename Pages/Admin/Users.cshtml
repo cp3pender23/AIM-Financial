@@ -139,15 +139,16 @@
                   <span class="pill" :class="u.isActive ? 'pill-active' : 'pill-disabled'" x-text="u.isActive ? 'Active' : 'Disabled'"></span>
                 </td>
                 <td x-text="fmtDate(u.createdAt)"></td>
-                <td x-text="fmtDate(u.lastLoginAt)" style="color:var(--text-muted)"></td>
+                <td x-text="fmtDate(u.lastLoginAt, true)" style="color:var(--text-muted)"></td>
                 <td style="text-align:right; white-space:nowrap">
                   <select class="field-input" style="font-size:11px; padding:4px 6px; min-width:110px"
-                          x-model="u._newRole" :disabled="u.role==='SuperAdmin' || u.id==='@Model.CurrentUserId'"
+                          x-model="u._newRole"
+                          :disabled="(!callerIsSuperAdmin && u.role==='SuperAdmin') || u.id==='@Model.CurrentUserId'"
                           @@change="changeRole(u)">
                     <option>Viewer</option>
                     <option>Analyst</option>
                     <option>Admin</option>
-                    <template x-if="u.role==='SuperAdmin'"><option>SuperAdmin</option></template>
+                    <template x-if="callerIsSuperAdmin"><option>SuperAdmin</option></template>
                   </select>
                   <button class="btn-secondary" @@click="toggleActive(u)" :disabled="u.id==='@Model.CurrentUserId'"
                           x-text="u.isActive ? 'Disable' : 'Enable'"></button>
@@ -184,6 +185,7 @@
                 <option>Viewer</option>
                 <option>Analyst</option>
                 <option>Admin</option>
+                <template x-if="callerIsSuperAdmin"><option>SuperAdmin</option></template>
               </select>
             </div>
             <template x-if="inviteErrors.length">
@@ -233,6 +235,7 @@
 function adminUsers() {
   return {
     isDark: (localStorage.getItem('aim.theme') ?? 'dark') === 'dark',
+    callerIsSuperAdmin: @(Model.CallerIsSuperAdmin ? "true" : "false"),
     rows: [],
     loading: true,
     filters: { search: '', role: '', status: '' },
@@ -350,12 +353,15 @@ function adminUsers() {
       }
     },
 
-    fmtDate(iso) {
+    fmtDate(iso, includeTime = false) {
       if (!iso) return '—';
       const d = new Date(iso);
       if (isNaN(d.getTime())) return '—';
-      if (d.getFullYear() < 1900) return '—'; // pre-migration 0001-01-01 fallback
-      return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+      if (d.getFullYear() < 1900) return '—';
+      const dateStr = d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+      if (!includeTime) return dateStr;
+      const timeStr = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' });
+      return dateStr + ' ' + timeStr;
     },
 
     toast(msg, kind = 'success') {

@@ -2,7 +2,9 @@
 @model AIM.Web.Pages.ProfileModel
 @{
     Layout = null;
-    var fmt = (DateTime? dt) => dt.HasValue ? dt.Value.ToString("MMM d, yyyy h:mm tt") + " UTC" : "—";
+    // Timestamps are rendered as ISO strings with data attributes so the
+    // client-side JS can format them in the user's local timezone (detected
+    // from the browser). The server doesn't know the caller's timezone.
 }
 <!DOCTYPE html>
 <html lang="en" x-data="profilePage()" x-init="init()" :class="{ dark: isDark }">
@@ -154,8 +156,8 @@
     <div class="section-card">
       <div class="section-title">Account info</div>
       <div class="section-sub">Read-only. Visible here for transparency.</div>
-      <div class="info-row"><span>Registered</span><span>@fmt(Model.Me.CreatedAt == default ? (DateTime?)null : Model.Me.CreatedAt)</span></div>
-      <div class="info-row"><span>Last sign-in</span><span>@fmt(Model.Me.LastLoginAt)</span></div>
+      <div class="info-row"><span>Registered</span><span class="local-time" data-iso="@(Model.Me.CreatedAt == default ? "" : Model.Me.CreatedAt.ToString("o"))">—</span></div>
+      <div class="info-row"><span>Last sign-in</span><span class="local-time" data-iso="@(Model.Me.LastLoginAt?.ToString("o") ?? "")">—</span></div>
       <div class="info-row"><span>Account active</span><span>@(Model.Me.IsActive ? "Yes" : "No")</span></div>
       @if (!string.IsNullOrEmpty(Model.InviterEmail))
       {
@@ -189,6 +191,15 @@ function profilePage() {
     toastId: 0,
     init() {
       this.$watch('isDark', v => localStorage.setItem('aim.theme', v ? 'dark' : 'light'));
+      // Convert server-rendered ISO timestamps to the user's local timezone.
+      document.querySelectorAll('.local-time[data-iso]').forEach(el => {
+        const iso = el.dataset.iso;
+        if (!iso) return;
+        const d = new Date(iso);
+        if (isNaN(d.getTime()) || d.getFullYear() < 1900) return;
+        el.textContent = d.toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' })
+          + ' ' + d.toLocaleTimeString(undefined, { hour:'2-digit', minute:'2-digit', timeZoneName:'short' });
+      });
     },
     toggleTheme() { this.isDark = !this.isDark; },
     async saveDetails() {

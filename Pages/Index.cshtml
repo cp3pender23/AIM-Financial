@@ -1197,7 +1197,7 @@
         if (!d) return '—';
         const t = new Date(d);
         if (isNaN(t)) return '—';
-        return t.toISOString().slice(0, 10);
+        return t.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
       },
       maskSsn(s) {
         if (!s) return '—';

@@ -384,8 +384,14 @@ api.MapGet("/admin/users/new-count", async (HttpContext ctx, UserManager<AimUser
 api.MapPost("/admin/users/invite", async (InviteUserDto dto, HttpContext ctx, UserManager<AimUser> userMgr, IAuditLogger audit, CancellationToken ct) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Email)) return Results.BadRequest(new { error = "Email required" });
-    if (dto.Role is not (AimRoles.Admin or AimRoles.Analyst or AimRoles.Viewer))
-        return Results.BadRequest(new { error = "Role must be Admin, Analyst, or Viewer" });
+    var callerIsSuperAdmin = EffectiveRoles.IsRealSuperAdmin(ctx);
+    var allowedInviteRoles = callerIsSuperAdmin
+        ? new[] { AimRoles.SuperAdmin, AimRoles.Admin, AimRoles.Analyst, AimRoles.Viewer }
+        : new[] { AimRoles.Admin, AimRoles.Analyst, AimRoles.Viewer };
+    if (!allowedInviteRoles.Contains(dto.Role))
+        return Results.BadRequest(new { error = callerIsSuperAdmin
+            ? "Role must be SuperAdmin, Admin, Analyst, or Viewer"
+            : "Role must be Admin, Analyst, or Viewer" });
 
     var actor = await userMgr.GetUserAsync(ctx.User);
     var existing = await userMgr.FindByEmailAsync(dto.Email);
@@ -412,22 +418,34 @@ api.MapPost("/admin/users/invite", async (InviteUserDto dto, HttpContext ctx, Us
     return Results.Ok(new { ok = true, id = user.Id, tempPassword });
 }).RequireAuthorization(AimPolicies.CanManageUsers);
 
-api.MapPost("/admin/users/{id}/role", async (string id, SetRoleDto dto, UserManager<AimUser> userMgr, IAuditLogger audit) =>
+api.MapPost("/admin/users/{id}/role", async (string id, SetRoleDto dto, HttpContext ctx, UserManager<AimUser> userMgr, IAuditLogger audit) =>
 {
-    if (dto.Role is not (AimRoles.Admin or AimRoles.Analyst or AimRoles.Viewer))
-        return Results.BadRequest(new { error = "Role must be Admin, Analyst, or Viewer" });
+    // Role-assignment ceiling: SuperAdmins can assign up to SuperAdmin;
+    // Admins can assign up to Admin. This is checked against the REAL role
+    // (not effective) because a SuperAdmin viewing-as-Admin should still
+    // retain the power to promote someone to SuperAdmin.
+    var callerIsSuperAdmin = EffectiveRoles.IsRealSuperAdmin(ctx);
+
+    // Validate the target role against what the caller is allowed to grant.
+    var allowedRoles = callerIsSuperAdmin
+        ? new[] { AimRoles.SuperAdmin, AimRoles.Admin, AimRoles.Analyst, AimRoles.Viewer }
+        : new[] { AimRoles.Admin, AimRoles.Analyst, AimRoles.Viewer };
+    if (!allowedRoles.Contains(dto.Role))
+        return Results.BadRequest(new { error = callerIsSuperAdmin
+            ? "Role must be SuperAdmin, Admin, Analyst, or Viewer"
+            : "Role must be Admin, Analyst, or Viewer" });
+
     var user = await userMgr.FindByIdAsync(id);
     if (user is null) return Results.NotFound();
 
-    // Strip every role except the new one. Prevents accidental role stacking
-    // (e.g. Admin + Analyst + Viewer) which made role-based UI render
-    // ambiguously in earlier iterations.
     var currentRoles = await userMgr.GetRolesAsync(user);
-    // SuperAdmin is seed-only; this endpoint never touches it. If the user is
-    // a SuperAdmin, refuse — changes to SuperAdmin membership happen in the
-    // database directly.
-    if (currentRoles.Contains(AimRoles.SuperAdmin))
-        return Results.BadRequest(new { error = "SuperAdmin role cannot be changed from this UI" });
+
+    // An Admin cannot touch an existing SuperAdmin — only a SuperAdmin can
+    // demote or reassign another SuperAdmin.
+    if (currentRoles.Contains(AimRoles.SuperAdmin) && !callerIsSuperAdmin)
+        return Results.BadRequest(new { error = "Only a SuperAdmin can change another SuperAdmin's role" });
+
+    // Strip every role except the new one to prevent accidental stacking.
     foreach (var r in currentRoles)
         await userMgr.RemoveFromRoleAsync(user, r);
     var add = await userMgr.AddToRoleAsync(user, dto.Role);
