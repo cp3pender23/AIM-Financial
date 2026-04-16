@@ -143,12 +143,12 @@
                 <td style="text-align:right; white-space:nowrap">
                   <select class="field-input" style="font-size:11px; padding:4px 6px; min-width:110px"
                           x-model="u._newRole"
-                          :disabled="(!callerIsSuperAdmin && u.role==='SuperAdmin') || u.id==='@Model.CurrentUserId'"
+                          :disabled="u.id==='@Model.CurrentUserId' || (!callerIsSuperAdmin && u.role==='SuperAdmin')"
                           @@change="changeRole(u)">
                     <option>Viewer</option>
                     <option>Analyst</option>
                     <option>Admin</option>
-                    <template x-if="callerIsSuperAdmin"><option>SuperAdmin</option></template>
+                    <option x-show="callerIsSuperAdmin || u.role==='SuperAdmin'">SuperAdmin</option>
                   </select>
                   <button class="btn-secondary" @@click="toggleActive(u)" :disabled="u.id==='@Model.CurrentUserId'"
                           x-text="u.isActive ? 'Disable' : 'Enable'"></button>
