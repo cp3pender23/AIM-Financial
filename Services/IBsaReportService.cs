@@ -28,4 +28,17 @@ public interface IBsaReportService
 
     Task<IReadOnlyList<EntityRowDto>> GetEntitiesAsync(IQueryCollection query, CancellationToken ct);
     Task<EntitySummaryDto> GetEntitySummaryAsync(IQueryCollection query, CancellationToken ct);
+
+    /// <summary>
+    /// Returns top-priority alerts (TOP/HIGH risk entities) for the notification drawer.
+    /// Computed on demand from current filings; no persistent alerts table.
+    /// </summary>
+    Task<IReadOnlyList<AlertDto>> GetAlertsAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Returns the entity relationship network: top-20 HIGH/TOP risk entities as nodes,
+    /// plus edges derived from shared DOB or shared institution state+type. Computed
+    /// on demand; no persistent graph table.
+    /// </summary>
+    Task<NetworkDto> GetNetworkAsync(CancellationToken ct);
 }

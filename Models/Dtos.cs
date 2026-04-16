@@ -90,7 +90,8 @@ public record EntityRowDto(
     string? ResidenceState,
     DateTime? FirstTxDate,
     DateTime? LastTxDate,
-    string RiskLevel);
+    string RiskLevel,
+    int RiskScore);
 
 public record EntitySummaryDto(
     int TotalEntities,
@@ -99,3 +100,50 @@ public record EntitySummaryDto(
     decimal? AverageTransaction,
     int TopAndHighEntities,
     IReadOnlyDictionary<string, int> ByRiskLevel);
+
+/// <summary>
+/// Alert surfaced in the dashboard alert drawer. Computed on-demand from current
+/// BsaReport data — no persistent alerts table. The stable <paramref name="Id"/>
+/// lets the frontend dismiss alerts via localStorage without server state.
+/// </summary>
+public record AlertDto(
+    string Id,
+    string Severity,
+    string Title,
+    string? Subject,
+    string LinkId,
+    decimal? TotalAmount,
+    int TransactionCount,
+    DateTime? LastTxDate);
+
+/// <summary>
+/// A node in the entity relationship network. Each represents a single linkId (a
+/// unique subject identified by SSN+DOB hash). Risk and score drive node color
+/// and size in the graph rendering.
+/// </summary>
+public record NetworkNodeDto(
+    string LinkId,
+    string? Subject,
+    string Risk,
+    int RiskScore,
+    decimal TotalAmount,
+    int TransactionCount,
+    string? ResidenceState,
+    string? InstitutionState,
+    string? InstitutionType,
+    string? Dob);
+
+/// <summary>
+/// An edge connecting two network nodes. <c>Kind</c> distinguishes edge types
+/// (e.g. "dob", "institution") which drive edge color and style.
+/// Edges are undirected; convention: <c>Source &lt; Target</c> by linkId string.
+/// </summary>
+public record NetworkEdgeDto(
+    string Source,
+    string Target,
+    string Kind,
+    string Label);
+
+public record NetworkDto(
+    IReadOnlyList<NetworkNodeDto> Nodes,
+    IReadOnlyList<NetworkEdgeDto> Edges);

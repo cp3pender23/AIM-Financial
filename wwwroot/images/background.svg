@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <rect width="1920" height="1080" fill="#0a1628"/>
+  <polygon points="0,1080 600,1080 1920,200 1920,0 1400,0 0,750" opacity="0.15" fill="url(#stripe)"/>
+  <polygon points="0,1080 500,1080 1920,280 1920,80 1500,0 100,700 0,780" opacity="0.25" fill="url(#stripe)"/>
+  <defs>
+    <linearGradient id="stripe" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1e40af"/>
+      <stop offset="100%" stop-color="#3b82f6"/>
+    </linearGradient>
+  </defs>
+</svg>

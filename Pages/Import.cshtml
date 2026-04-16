@@ -1,70 +1,170 @@
 @page
 @{
     Layout = null;
-    if (!User.IsInRole("Admin")) { Response.Redirect("/"); return; }
+    var isAdmin = User.IsInRole("Admin");
+    var isAnalyst = User.IsInRole("Analyst") || isAdmin;
+    var displayName = User.Identity?.Name ?? "Guest";
+    if (!isAdmin) { Response.Redirect("/"); return; }
 }
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en" x-data="{ isDark: localStorage.getItem('aim-theme') === 'dark' || (!localStorage.getItem('aim-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches), sidebarCollapsed: localStorage.getItem('aim-sidebar') === 'collapsed', mobileOpen: false }" x-init="$watch('isDark', v => { if(v) document.documentElement.classList.add('dark'); else document.documentElement.classList.remove('dark'); localStorage.setItem('aim-theme', v ? 'dark' : 'light'); }); if(isDark) document.documentElement.classList.add('dark'); $watch('sidebarCollapsed', v => { document.getElementById('main').classList.toggle('sidebar-collapsed', v); localStorage.setItem('aim-sidebar', v ? 'collapsed' : 'expanded'); }); if(sidebarCollapsed) document.getElementById('main').classList.add('sidebar-collapsed');" :class="{ dark: isDark }">
 <head>
   <meta charset="UTF-8" />
   <title>AIM — Bulk Import</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/theme.css">
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: { extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] } } }
+    }
+  </script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.9/dist/cdn.min.js"></script>
-  <style> body{background:#070b16;color:#e2e8f0;font-family:ui-sans-serif,system-ui,sans-serif} </style>
+  <style>
+    body { background: var(--bg-page); color: var(--text-primary); font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; }
+    .import-surface { background: var(--bg-surface); border: 1px solid var(--border); }
+    .import-thead { color: var(--text-muted); }
+    .import-row { border-top: 1px solid var(--border); }
+    .import-error-row { background: var(--risk-top-bg); }
+    .text-muted { color: var(--text-muted); }
+    .link-accent { color: var(--accent-light); }
+    .link-accent:hover { text-decoration: underline; }
+    .btn-accent { background: var(--accent); color: #fff; }
+    .btn-accent:hover { background: var(--accent-hover); }
+    .btn-disabled { background: var(--bg-input); color: var(--text-muted); }
+    .success-banner { background: var(--toast-success-bg); border: 1px solid var(--toast-success-border); color: var(--toast-success-text); }
+  </style>
 </head>
-<body x-data="bulkImport()">
-  <div class="max-w-5xl mx-auto p-6">
-    <div class="flex items-center justify-between mb-5">
-      <div>
-        <h1 class="text-xl font-semibold">Bulk CSV Import</h1>
-        <p class="text-xs text-slate-500">Preview and validate before committing. Historical loads land as <span class="font-mono">Acknowledged</span>.</p>
+<body class="antialiased" style="background:var(--bg-page);color:var(--text-primary)">
+
+  <!-- Mobile hamburger trigger -->
+  <button id="mobile-trigger" @@click="mobileOpen = !mobileOpen"
+    class="fixed top-3 left-3 z-50 p-2 rounded-lg transition-opacity"
+    :class="{ 'opacity-0 pointer-events-none': mobileOpen }"
+    style="background:var(--bg-sidebar);color:var(--text-on-dark)"
+    aria-label="Open sidebar navigation">
+    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+  </button>
+
+  <!-- Mobile backdrop -->
+  <div id="mobile-backdrop" :class="{'open': mobileOpen}" @@click="mobileOpen = false"></div>
+
+  <aside id="sidebar" :class="{'collapsed': sidebarCollapsed, 'mobile-open': mobileOpen}">
+    <!-- Logo + collapse toggle -->
+    <div class="flex items-center justify-between px-3 pt-4 pb-3 border-b" style="border-color:var(--border)">
+      <div class="flex items-center gap-2 min-w-0">
+        <img src="/images/AimLogo.svg" alt="AIM" class="w-7 h-7 flex-shrink-0" />
+        <span class="sidebar-label text-sm font-bold" style="color:var(--text-on-dark)">AIM</span>
       </div>
-      <a href="/" class="text-blue-400 text-xs hover:underline">← Dashboard</a>
+      <button @@click="mobileOpen ? (mobileOpen = false) : (sidebarCollapsed = !sidebarCollapsed, localStorage.setItem('aim-sidebar', sidebarCollapsed ? 'collapsed' : 'expanded'))" class="sidebar-collapse-chevron p-1 rounded hover:bg-white/10 flex-shrink-0" style="color:var(--text-muted)" :title="mobileOpen ? 'Close sidebar' : 'Toggle sidebar'">
+        <svg :style="sidebarCollapsed ? 'transform:rotate(180deg)' : ''" style="transition:transform .25s" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 16 16"><path d="M10 3L5 8l5 5"/></svg>
+      </button>
     </div>
 
-    <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 mb-5">
-      <form @@submit.prevent="preview()" class="flex items-center gap-3">
+    <!-- Page navigation -->
+    <div class="p-2 border-b" style="border-color:var(--border)">
+      <a href="/" class="nav-item mb-1" title="Dashboard">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 16 16" class="flex-shrink-0"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+        <span class="nav-link-text">Dashboard</span>
+      </a>
+      @if (isAnalyst)
+      {
+      <a href="/Filing" class="nav-item mb-1" title="Filing Queue">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 16 16" class="flex-shrink-0"><path d="M2 3h12v10H2z"/><path d="M2 6h12"/><path d="M6 6v7"/></svg>
+        <span class="nav-link-text">Filing Queue</span>
+      </a>
+      }
+      @if (isAdmin)
+      {
+      <a href="/Import" class="nav-item active mb-1" title="Import">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 16 16" class="flex-shrink-0"><path d="M8 2v8M5 7l3 3 3-3"/><path d="M2 11v2h12v-2"/></svg>
+        <span class="nav-link-text">Import</span>
+      </a>
+      }
+    </div>
+
+    <!-- Bottom: user info + theme toggle -->
+    <div class="flex-1"></div>
+    <div class="px-3 py-3 border-t sidebar-bottom" style="border-color:var(--border)">
+      <button @@click="isDark = !isDark; localStorage.setItem('aim-theme', isDark ? 'dark' : 'light')" class="nav-item w-full mb-2" title="Toggle theme">
+        <template x-if="isDark"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 16 16" class="flex-shrink-0"><circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41"/></svg></template>
+        <template x-if="!isDark"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 16 16" class="flex-shrink-0"><path d="M13.5 8.5a5.5 5.5 0 1 1-7-7 7 7 0 0 0 7 7z"/></svg></template>
+        <span class="nav-link-text" x-text="isDark ? 'Light Mode' : 'Dark Mode'"></span>
+      </button>
+      <div class="flex items-center gap-2 px-3 py-1">
+        <div class="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0" style="background:var(--accent);color:#fff" x-text="('@displayName')[0]?.toUpperCase()"></div>
+        <div class="nav-link-text min-w-0">
+          <div class="text-xs truncate" style="color:var(--text-on-dark)" x-text="'@displayName'"></div>
+          <div class="text-[10px]" style="color:var(--text-muted)">@(isAdmin ? "Admin" : (isAnalyst ? "Analyst" : "Viewer"))</div>
+        </div>
+      </div>
+      <a href="/Identity/Account/Logout" class="nav-item mt-1" title="Sign out">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 16 16" class="flex-shrink-0"><path d="M6 14H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h3M11 11l3-3-3-3M6 8h8"/></svg>
+        <span class="nav-link-text">Sign out</span>
+      </a>
+    </div>
+  </aside>
+
+  <main id="main" class="p-4 sm:p-6" :class="{'sidebar-collapsed': sidebarCollapsed}">
+  <div x-data="bulkImport()">
+    <div class="page-header-row flex flex-wrap items-center justify-between gap-3 mb-5">
+      <div class="min-w-0">
+        <h1 class="text-lg sm:text-xl font-semibold">Bulk CSV Import</h1>
+        <p class="text-xs text-muted">Preview and validate before committing. Historical loads land as <span class="font-mono">Acknowledged</span>.</p>
+      </div>
+    </div>
+
+    <div class="import-surface rounded-lg p-4 mb-5">
+      <form @@submit.prevent="preview()" class="flex flex-wrap items-center gap-3">
         <input type="file" accept=".csv" @@change="file = $event.target.files[0]" class="text-xs" />
         <button type="submit" :disabled="!file || loading"
-          class="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 rounded-md px-3 py-1.5 text-xs text-white">Preview</button>
-        <span class="text-xs text-slate-500" x-show="loading">Parsing…</span>
+          :style="(!file || loading) ? 'background: var(--bg-input); color: var(--text-muted);' : 'background: var(--accent); color: #fff;'"
+          class="rounded-md px-3 py-1.5 text-xs">Preview</button>
+        <span class="text-xs text-muted" x-show="loading">Parsing...</span>
       </form>
     </div>
 
-    <div x-show="result" class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-      <div class="flex items-center justify-between mb-3">
+    <div x-show="result" class="import-surface rounded-lg p-4">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
         <div class="text-sm">
           <span x-text="result?.totalRows"></span> rows ·
-          <span class="text-green-400" x-text="result?.validRows"></span> valid ·
-          <span class="text-red-400" x-text="result?.errorRows"></span> errors
+          <span style="color: var(--risk-low-text);" x-text="result?.validRows"></span> valid ·
+          <span style="color: var(--risk-top-text);" x-text="result?.errorRows"></span> errors
         </div>
         <button @@click="commit()" :disabled="!result?.validRows || result?.errorRows"
-          class="bg-green-600 hover:bg-green-500 disabled:bg-slate-700 rounded-md px-3 py-1.5 text-xs text-white">Commit</button>
+          :style="(!result?.validRows || result?.errorRows) ? 'background: var(--bg-input); color: var(--text-muted);' : 'background: var(--toast-success-text); color: #fff;'"
+          class="rounded-md px-3 py-1.5 text-xs">Commit</button>
       </div>
-      <table class="w-full text-xs">
-        <thead class="text-slate-500 uppercase text-[10px] tracking-widest">
+      <div class="overflow-x-auto">
+      <table class="w-full text-xs" style="min-width:640px">
+        <thead class="import-thead uppercase text-[10px] tracking-widest">
           <tr><th class="text-left p-1.5">Row</th><th class="text-left p-1.5">BSA ID</th><th class="text-left p-1.5">Subject</th><th class="text-right p-1.5">Amount</th><th class="text-left p-1.5">Risk</th><th class="text-left p-1.5">Errors</th></tr>
         </thead>
         <tbody>
           <template x-for="r in (result?.sample || [])" :key="r.rowNumber">
-            <tr class="border-t border-slate-800" :class="r.errors.length ? 'bg-red-950/30' : ''">
+            <tr class="import-row" :class="r.errors.length ? 'import-error-row' : ''">
               <td class="p-1.5" x-text="r.rowNumber"></td>
               <td class="p-1.5" x-text="r.parsed?.bsaId || '—'"></td>
               <td class="p-1.5" x-text="r.parsed?.subjectName || '—'"></td>
               <td class="p-1.5 text-right" x-text="r.parsed?.amountTotal ?? ''"></td>
               <td class="p-1.5" x-text="r.parsed?.riskLevel || ''"></td>
-              <td class="p-1.5 text-red-400" x-text="r.errors.join('; ')"></td>
+              <td class="p-1.5" style="color: var(--risk-top-text);" x-text="r.errors.join('; ')"></td>
             </tr>
           </template>
         </tbody>
       </table>
+      </div>
     </div>
 
-    <div x-show="committed" class="mt-4 p-3 rounded-md bg-green-950/30 border border-green-900 text-green-300 text-xs">
+    <div x-show="committed" class="mt-4 p-3 rounded-md success-banner text-xs">
       Committed batch <span class="font-mono" x-text="committed?.batchId"></span>,
       inserted <span x-text="committed?.inserted"></span> rows.
     </div>
   </div>
+  </main>
 
 <script>
   function bulkImport() {

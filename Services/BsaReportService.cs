@@ -365,6 +365,7 @@ public class BsaReportService(AimDbContext db, IAuditLogger audit, IFinCenClient
                 var isUnlinked = g.Key is null;
                 var linkId = g.Key ?? "unlinked";
                 var mostRecent = g.MaxBy(x => x.FilingDate);
+                var risk = HighestRisk(g.Select(x => x.RiskLevel));
                 return new EntityRowDto(
                     LinkId: linkId,
                     SubjectName: isUnlinked ? "— Unlinked filings —" : mostRecent?.SubjectName,
@@ -374,10 +375,11 @@ public class BsaReportService(AimDbContext db, IAuditLogger audit, IFinCenClient
                     ResidenceState: Mode(g.Select(x => x.SubjectState)),
                     FirstTxDate: g.Min(x => x.FilingDate),
                     LastTxDate: g.Max(x => x.FilingDate),
-                    RiskLevel: HighestRisk(g.Select(x => x.RiskLevel))
+                    RiskLevel: risk,
+                    RiskScore: risk switch { "TOP" => 4, "HIGH" => 3, "MODERATE" => 2, _ => 1 }
                 );
             })
-            .OrderByDescending(r => r.TransactionCount)
+            .OrderByDescending(r => r.RiskScore)
             .ThenByDescending(r => r.TotalAmount)
             .ToList();
 
@@ -417,5 +419,132 @@ public class BsaReportService(AimDbContext db, IAuditLogger audit, IFinCenClient
             TopAndHighEntities: groups.Count(g => g.Risk is "TOP" or "HIGH"),
             ByRiskLevel: byRisk
         );
+    }
+
+    public async Task<IReadOnlyList<AlertDto>> GetAlertsAsync(CancellationToken ct)
+    {
+        // Alerts are global — they ignore the sidebar filters so users always see
+        // the highest-risk entities regardless of which slice they're viewing.
+        // Materialize up to 10,000 filings and group in memory (same pattern as
+        // GetEntitiesAsync, since LinkAnalysis.BuildLinkId isn't translatable to SQL).
+        var filings = await db.BsaReports.AsNoTracking().Take(10_000).ToListAsync(ct);
+
+        return filings
+            .GroupBy(f => LinkAnalysis.BuildLinkId(f.SubjectEinSsn, f.SubjectDob))
+            .Select(g =>
+            {
+                var isUnlinked = g.Key is null;
+                var linkId = g.Key ?? "unlinked";
+                var mostRecent = g.MaxBy(x => x.FilingDate);
+                var risk = HighestRisk(g.Select(x => x.RiskLevel));
+                var score = risk switch { "TOP" => 4, "HIGH" => 3, "MODERATE" => 2, _ => 1 };
+                return new
+                {
+                    LinkId = linkId,
+                    Subject = isUnlinked ? "— Unlinked filings —" : mostRecent?.SubjectName,
+                    Risk = risk,
+                    Score = score,
+                    TotalAmount = g.Sum(x => x.AmountTotal ?? 0m),
+                    Count = g.Count(),
+                    LastTxDate = g.Max(x => x.FilingDate)
+                };
+            })
+            .Where(e => e.Risk is "TOP" or "HIGH")
+            .OrderByDescending(e => e.Score)
+            .ThenByDescending(e => e.TotalAmount)
+            .Take(20)
+            .Select(e => new AlertDto(
+                Id: $"risk-{e.LinkId}",
+                Severity: e.Risk,
+                Title: e.Risk == "TOP" ? "Top-tier risk entity" : "High-risk entity",
+                Subject: e.Subject,
+                LinkId: e.LinkId,
+                TotalAmount: e.TotalAmount,
+                TransactionCount: e.Count,
+                LastTxDate: e.LastTxDate
+            ))
+            .ToList();
+    }
+
+    public async Task<NetworkDto> GetNetworkAsync(CancellationToken ct)
+    {
+        // Mirror the GetAlertsAsync entity rollup — same top-20 HIGH/TOP selection
+        // — then add representative institution + DOB per entity so we can compute
+        // cross-entity relationships in memory.
+        var filings = await db.BsaReports.AsNoTracking().Take(10_000).ToListAsync(ct);
+
+        var entities = filings
+            .GroupBy(f => LinkAnalysis.BuildLinkId(f.SubjectEinSsn, f.SubjectDob))
+            .Select(g =>
+            {
+                var isUnlinked = g.Key is null;
+                var linkId = g.Key ?? "unlinked";
+                var mostRecent = g.MaxBy(x => x.FilingDate);
+                var risk = HighestRisk(g.Select(x => x.RiskLevel));
+                var score = risk switch { "TOP" => 4, "HIGH" => 3, "MODERATE" => 2, _ => 1 };
+                return new
+                {
+                    LinkId = linkId,
+                    Subject = isUnlinked ? "— Unlinked filings —" : mostRecent?.SubjectName,
+                    Risk = risk,
+                    Score = score,
+                    TotalAmount = g.Sum(x => x.AmountTotal ?? 0m),
+                    Count = g.Count(),
+                    ResidenceState = Mode(g.Select(x => x.SubjectState)),
+                    InstitutionState = Mode(g.Select(x => x.InstitutionState)),
+                    InstitutionType = Mode(g.Select(x => x.InstitutionType)),
+                    Dob = mostRecent?.SubjectDob
+                };
+            })
+            .Where(e => e.Risk is "TOP" or "HIGH")
+            .OrderByDescending(e => e.Score)
+            .ThenByDescending(e => e.TotalAmount)
+            .Take(20)
+            .ToList();
+
+        var nodes = entities.Select(e => new NetworkNodeDto(
+            LinkId: e.LinkId,
+            Subject: e.Subject,
+            Risk: e.Risk,
+            RiskScore: e.Score,
+            TotalAmount: e.TotalAmount,
+            TransactionCount: e.Count,
+            ResidenceState: e.ResidenceState,
+            InstitutionState: e.InstitutionState,
+            InstitutionType: e.InstitutionType,
+            Dob: e.Dob
+        )).ToList();
+
+        // O(n²) pairwise edge computation — n ≤ 20 so at most 190 comparisons.
+        // Undirected: only emit edges where source.LinkId < target.LinkId (lexicographic).
+        var edges = new List<NetworkEdgeDto>();
+        for (int i = 0; i < entities.Count; i++)
+        {
+            for (int j = i + 1; j < entities.Count; j++)
+            {
+                var a = entities[i];
+                var b = entities[j];
+                var (src, tgt) = string.CompareOrdinal(a.LinkId, b.LinkId) < 0 ? (a, b) : (b, a);
+
+                // DOB match (strong signal — same exact birthday across two distinct entities)
+                if (!string.IsNullOrWhiteSpace(a.Dob) && a.Dob == b.Dob)
+                {
+                    edges.Add(new NetworkEdgeDto(src.LinkId, tgt.LinkId, "dob",
+                        $"Same DOB: {a.Dob}"));
+                }
+
+                // Institution match (medium signal — same institution type in same state)
+                if (!string.IsNullOrWhiteSpace(a.InstitutionState) &&
+                    !string.IsNullOrWhiteSpace(a.InstitutionType) &&
+                    a.InstitutionState == b.InstitutionState &&
+                    a.InstitutionType == b.InstitutionType)
+                {
+                    edges.Add(new NetworkEdgeDto(src.LinkId, tgt.LinkId, "institution",
+                        $"Same {a.InstitutionType} in {a.InstitutionState}"));
+                }
+            }
+        }
+
+        return new NetworkDto(nodes, edges);
     }
 }

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "aim-web",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["watch", "--project", "AIM.Web.csproj"],
+      "port": 5055
+    }
+  ]
+}

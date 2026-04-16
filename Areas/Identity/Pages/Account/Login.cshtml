@@ -1,0 +1,243 @@
+@page
+@model LoginModel
+@{ Layout = null; }
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign In - AIM</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+            background: #0a1628 url('/images/background.svg') no-repeat center center;
+            background-size: cover;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+        .card {
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);
+            padding: 2rem;
+            width: 100%;
+            max-width: 28rem;
+        }
+        .brand {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .brand img { width: 32px; height: 32px; }
+        .brand span {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 2rem;
+            font-weight: 700;
+            color: #000;
+        }
+        h1 {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #212529;
+            margin-bottom: 1.5rem;
+        }
+        .form-group { margin-bottom: 1rem; }
+        label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #374151;
+            margin-bottom: 0.375rem;
+        }
+        .input-wrap {
+            position: relative;
+        }
+        input[type="email"],
+        input[type="password"],
+        input[type="text"] {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+        input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
+        .toggle-pw {
+            position: absolute;
+            right: 0.75rem;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: #9ca3af;
+            cursor: pointer;
+            font-size: 1.1rem;
+            padding: 0.25rem;
+        }
+        .toggle-pw:hover { color: #6b7280; }
+        .forgot {
+            display: block;
+            text-align: right;
+            font-size: 0.875rem;
+            color: #6c757d;
+            text-decoration: none;
+            margin-bottom: 1.25rem;
+        }
+        .forgot:hover { text-decoration: underline; }
+        .btn-signin {
+            display: block;
+            width: 100%;
+            padding: 1rem 1.5rem;
+            background: #1e40af;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .btn-signin:hover { background: #1e3a8a; }
+        .signup-row {
+            text-align: center;
+            margin-top: 1.25rem;
+            font-size: 0.875rem;
+            color: #828282;
+        }
+        .signup-row a {
+            color: #6c757d;
+            font-weight: 600;
+            text-decoration: none;
+        }
+        .signup-row a:hover { text-decoration: underline; }
+        .terms {
+            text-align: center;
+            font-size: 0.875rem;
+            color: #212529;
+            margin-top: 1rem;
+            line-height: 1.5;
+        }
+        .terms a {
+            color: #6c757d;
+            text-decoration: none;
+        }
+        .terms a:hover { text-decoration: underline; }
+        .footer {
+            margin-top: 2rem;
+            text-align: center;
+        }
+        .footer span {
+            color: #212529;
+            font-size: 1rem;
+        }
+        .footer img {
+            display: block;
+            margin: 0.5rem auto 0;
+            height: 34px;
+        }
+        .validation-summary-errors ul {
+            list-style: none;
+            padding: 0.75rem 1rem;
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            font-size: 0.875rem;
+            color: #dc2626;
+        }
+        .field-validation-error {
+            font-size: 0.8rem;
+            color: #dc2626;
+            margin-top: 0.25rem;
+            display: block;
+        }
+        .remember-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+        .remember-row label {
+            margin-bottom: 0;
+            font-weight: 400;
+            color: #6c757d;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="brand">
+            <img src="/images/AimLogo-dark.svg" alt="AIM logo" />
+            <span>AIM</span>
+        </div>
+
+        <h1>Welcome Back</h1>
+
+        <form method="post">
+            <div asp-validation-summary="ModelOnly" class="validation-summary-errors"></div>
+
+            <div class="form-group">
+                <label asp-for="Input.Email">Email</label>
+                <input asp-for="Input.Email" type="email" placeholder="name@example.com" autocomplete="username" />
+                <span asp-validation-for="Input.Email" class="field-validation-error"></span>
+            </div>
+
+            <div class="form-group">
+                <label asp-for="Input.Password">Password</label>
+                <div class="input-wrap">
+                    <input asp-for="Input.Password" type="password" placeholder="password" autocomplete="current-password" id="pw" />
+                    <button type="button" class="toggle-pw" onclick="togglePw()" aria-label="Toggle password visibility" id="eyeBtn">&#128065;</button>
+                </div>
+                <span asp-validation-for="Input.Password" class="field-validation-error"></span>
+            </div>
+
+            <div class="remember-row">
+                <input asp-for="Input.RememberMe" type="checkbox" />
+                <label asp-for="Input.RememberMe">Remember me</label>
+            </div>
+
+            <a class="forgot" asp-area="Identity" asp-page="/Account/ForgotPassword">Forgot password?</a>
+
+            <button type="submit" class="btn-signin">Sign In</button>
+        </form>
+
+        <div class="signup-row">
+            Don't have an account?
+            <a asp-area="Identity" asp-page="/Account/Register" asp-route-returnUrl="@Model.ReturnUrl">Create New Account</a>
+        </div>
+
+        <p class="terms">
+            By signing in you agree to the
+            <a href="#">Terms of Service</a> and
+            <a href="#">Privacy Policy</a>
+        </p>
+    </div>
+
+    <div class="footer">
+        <span>Powered by</span>
+        <img src="/images/shieldlytics.png" alt="Shieldlytics" onerror="this.style.display='none'" />
+    </div>
+
+    <script>
+        function togglePw() {
+            const pw = document.getElementById('pw');
+            const btn = document.getElementById('eyeBtn');
+            if (pw.type === 'password') { pw.type = 'text'; btn.innerHTML = '&#128064;'; }
+            else { pw.type = 'password'; btn.innerHTML = '&#128065;'; }
+        }
+    </script>
+</body>
+</html>

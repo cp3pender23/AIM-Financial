@@ -1,0 +1,396 @@
+/* ═══════════════════════════════════════════════════════════════
+   AIM Design System — CSS Custom Properties
+   Light mode = :root (Guardian-style)
+   Dark mode  = .dark
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Light Mode (default) ────────────────────────────────────── */
+:root {
+  /* Backgrounds */
+  --bg-page:      #f3f4f6;
+  --bg-surface:   #ffffff;
+  --bg-elevated:  #ffffff;
+  --bg-sidebar:   #0f172a;   /* navy — stays dark in both modes */
+  /* Sidebar-specific inputs (always dark, regardless of theme) */
+  --sidebar-input-bg:     #1e293b;
+  --sidebar-input-border: #334155;
+  --sidebar-input-text:   #e2e8f0;
+  --sidebar-input-muted:  #64748b;
+  --sidebar-hover-bg:     rgba(30,41,59,.4);
+  --bg-input:     #ffffff;
+  --bg-hover:     #f9fafb;
+  --bg-row-alt:   #f9fafb;
+
+  /* Text */
+  --text-primary:   #111827;
+  --text-secondary: #6b7280;
+  --text-muted:     #9ca3af;
+  --text-on-dark:   #e2e8f0; /* for sidebar, always dark */
+
+  /* Borders */
+  --border:       #e5e7eb;
+  --border-input: #d1d5db;
+  --border-focus: #3b82f6;
+
+  /* Accent — royal blue (matches login page) */
+  --accent:       #1e40af;
+  --accent-hover: #1e3a8a;
+  --accent-light: #3b82f6;
+  --accent-bg:    rgba(59,130,246,.08);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.05);
+  --shadow-md: 0 4px 6px -1px rgba(0,0,0,.07), 0 2px 4px -2px rgba(0,0,0,.05);
+
+  /* Scrollbar */
+  --scrollbar-track: #f1f5f9;
+  --scrollbar-thumb: #cbd5e1;
+
+  /* Risk tiers — universal, same in both modes */
+  --risk-top-bg:    rgba(239,68,68,.12);
+  --risk-top-text:  #dc2626;
+  --risk-top-border:rgba(239,68,68,.25);
+  --risk-high-bg:   rgba(249,115,22,.12);
+  --risk-high-text: #ea580c;
+  --risk-high-border:rgba(249,115,22,.25);
+  --risk-mod-bg:    rgba(234,179,8,.12);
+  --risk-mod-text:  #ca8a04;
+  --risk-mod-border:rgba(234,179,8,.25);
+  --risk-low-bg:    rgba(34,197,94,.12);
+  --risk-low-text:  #16a34a;
+  --risk-low-border:rgba(34,197,94,.25);
+
+  /* Status badges */
+  --status-draft-bg:       #f1f5f9;
+  --status-draft-text:     #64748b;
+  --status-pending-bg:     rgba(234,179,8,.1);
+  --status-pending-text:   #ca8a04;
+  --status-approved-bg:    rgba(14,165,233,.1);
+  --status-approved-text:  #0284c7;
+  --status-submitted-bg:   rgba(99,102,241,.1);
+  --status-submitted-text: #6366f1;
+  --status-ack-bg:         rgba(16,185,129,.1);
+  --status-ack-text:       #059669;
+  --status-rejected-bg:    rgba(239,68,68,.1);
+  --status-rejected-text:  #dc2626;
+
+  /* Toast */
+  --toast-info-bg:    #eff6ff;
+  --toast-info-border:#bfdbfe;
+  --toast-info-text:  #1e40af;
+  --toast-success-bg:    #f0fdf4;
+  --toast-success-border:#bbf7d0;
+  --toast-success-text:  #166534;
+  --toast-error-bg:    #fef2f2;
+  --toast-error-border:#fecaca;
+  --toast-error-text:  #991b1b;
+
+  /* Chart */
+  --chart-grid:   #e5e7eb;
+  --chart-text:   #6b7280;
+  --chart-bar:    #3b82f6;
+  --chart-stroke: #f3f4f6;
+
+  /* AG Grid */
+  --ag-bg:          #ffffff;
+  --ag-header-bg:   #f8fafc;
+  --ag-row-alt-bg:  #f9fafb;
+  --ag-border:      #e5e7eb;
+  --ag-text:        #111827;
+  --ag-header-text: #64748b;
+  --ag-hover-bg:    #f1f5f9;
+  --ag-selected-bg: rgba(59,130,246,.08);
+}
+
+/* ── Dark Mode ───────────────────────────────────────────────── */
+.dark {
+  --bg-page:      #070b16;
+  --bg-surface:   #0f172a;
+  --bg-elevated:  #111827;
+  --bg-sidebar:   #0b0f1e;
+  --bg-input:     #1e293b;
+  --bg-hover:     #1e293b;
+  --bg-row-alt:   #0f1629;
+
+  --text-primary:   #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted:     #64748b;
+  --text-on-dark:   #e2e8f0;
+
+  --border:       #1e293b;
+  --border-input: #334155;
+  --border-focus: #3b82f6;
+
+  --accent:       #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-light: #60a5fa;
+  --accent-bg:    rgba(59,130,246,.15);
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.3);
+  --shadow-md: 0 4px 6px -1px rgba(0,0,0,.4), 0 2px 4px -2px rgba(0,0,0,.3);
+
+  --scrollbar-track: #0f172a;
+  --scrollbar-thumb: #334155;
+
+  /* Risk — brighter for dark backgrounds */
+  --risk-top-text:  #f87171;
+  --risk-top-bg:    rgba(239,68,68,.15);
+  --risk-top-border:rgba(239,68,68,.3);
+  --risk-high-text: #fb923c;
+  --risk-high-bg:   rgba(249,115,22,.15);
+  --risk-high-border:rgba(249,115,22,.3);
+  --risk-mod-text:  #fbbf24;
+  --risk-mod-bg:    rgba(234,179,8,.15);
+  --risk-mod-border:rgba(234,179,8,.3);
+  --risk-low-text:  #4ade80;
+  --risk-low-bg:    rgba(34,197,94,.15);
+  --risk-low-border:rgba(34,197,94,.3);
+
+  /* Status */
+  --status-draft-bg:       #1e293b;
+  --status-draft-text:     #94a3b8;
+  --status-pending-bg:     rgba(234,179,8,.15);
+  --status-pending-text:   #fbbf24;
+  --status-approved-bg:    rgba(14,165,233,.15);
+  --status-approved-text:  #38bdf8;
+  --status-submitted-bg:   rgba(99,102,241,.15);
+  --status-submitted-text: #a5b4fc;
+  --status-ack-bg:         rgba(16,185,129,.15);
+  --status-ack-text:       #34d399;
+  --status-rejected-bg:    rgba(239,68,68,.15);
+  --status-rejected-text:  #f87171;
+
+  /* Toast */
+  --toast-info-bg:    #0c1a2e;
+  --toast-info-border:#1e3a5f;
+  --toast-info-text:  #93c5fd;
+  --toast-success-bg:    #052e16;
+  --toast-success-border:#14532d;
+  --toast-success-text:  #86efac;
+  --toast-error-bg:    #1c0909;
+  --toast-error-border:#450a0a;
+  --toast-error-text:  #fca5a5;
+
+  /* Chart */
+  --chart-grid:   #1e293b;
+  --chart-text:   #64748b;
+  --chart-bar:    #60a5fa;
+  --chart-stroke: #0f172a;
+
+  /* AG Grid */
+  --ag-bg:          #111827;
+  --ag-header-bg:   #0d1321;
+  --ag-row-alt-bg:  #0f1629;
+  --ag-border:      #1e293b;
+  --ag-text:        #e2e8f0;
+  --ag-header-text: #475569;
+  --ag-hover-bg:    #1e293b;
+  --ag-selected-bg: rgba(59,130,246,.15);
+}
+
+/* ── Theme transition ────────────────────────────────────────── */
+html.theme-transition,
+html.theme-transition *,
+html.theme-transition *::before,
+html.theme-transition *::after {
+  transition: background-color .2s ease, border-color .2s ease, color .15s ease, box-shadow .2s ease !important;
+}
+
+/* ── Shared component styles ─────────────────────────────────── */
+body {
+  background: var(--bg-page);
+  color: var(--text-primary);
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
+
+/* Risk badges */
+.rb { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.rb-TOP      { background: var(--risk-top-bg);  color: var(--risk-top-text);  border: 1px solid var(--risk-top-border); }
+.rb-HIGH     { background: var(--risk-high-bg); color: var(--risk-high-text); border: 1px solid var(--risk-high-border); }
+.rb-MODERATE { background: var(--risk-mod-bg);  color: var(--risk-mod-text);  border: 1px solid var(--risk-mod-border); }
+.rb-LOW      { background: var(--risk-low-bg);  color: var(--risk-low-text);  border: 1px solid var(--risk-low-border); }
+
+/* Status badges */
+.sb { display: inline-flex; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+.sb-Draft          { background: var(--status-draft-bg);     color: var(--status-draft-text); }
+.sb-PendingReview  { background: var(--status-pending-bg);   color: var(--status-pending-text); }
+.sb-Approved       { background: var(--status-approved-bg);  color: var(--status-approved-text); }
+.sb-Submitted      { background: var(--status-submitted-bg); color: var(--status-submitted-text); }
+.sb-Acknowledged   { background: var(--status-ack-bg);       color: var(--status-ack-text); }
+.sb-Rejected       { background: var(--status-rejected-bg);  color: var(--status-rejected-text); }
+
+/* Toast */
+.toast-info    { background: var(--toast-info-bg);    border: 1px solid var(--toast-info-border);    color: var(--toast-info-text); }
+.toast-success { background: var(--toast-success-bg); border: 1px solid var(--toast-success-border); color: var(--toast-success-text); }
+.toast-error   { background: var(--toast-error-bg);   border: 1px solid var(--toast-error-border);   color: var(--toast-error-text); }
+
+/* ── Sidebar: base (always applied) ──────────────────────────── */
+#sidebar { position:fixed; left:0; top:0; bottom:0; width:232px; background:var(--bg-sidebar); border-right:1px solid var(--border); display:flex; flex-direction:column; z-index:40; transition:width .25s cubic-bezier(.4,0,.2,1); overflow:hidden; }
+.sidebar-label { transition:opacity .2s ease, width .2s ease; }
+.nav-link-text { transition:opacity .2s ease; white-space:nowrap; }
+#main { margin-left:232px; min-height:100vh; background:var(--bg-page); transition:margin-left .25s cubic-bezier(.4,0,.2,1); }
+
+/* Nav items — expanded state (default) */
+.nav-item { display:flex; align-items:center; gap:9px; padding:7px 12px; border-radius:7px; cursor:pointer; transition:all .15s; color:var(--ag-header-text); font-size:13px; font-weight:500; text-decoration:none; }
+.nav-item:hover { background:var(--sidebar-input-bg); color:var(--text-on-dark); }
+.nav-item.active { background:var(--accent-bg); color:var(--accent-light); }
+.nav-item svg { flex-shrink:0; }
+
+/* ── Collapsed icon-rail styling (desktop only) ──────────────────
+   Wrapped in min-width/min-height so the `.collapsed` class has no
+   visual effect on mobile — on phones the sidebar is always either
+   fully visible (drawer open) or off-screen (drawer closed). */
+@media (min-width: 768px) and (min-height: 501px) {
+  #sidebar.collapsed { width:64px; }
+  #sidebar.collapsed .sidebar-label { opacity:0; width:0; overflow:hidden; white-space:nowrap; }
+  #sidebar.collapsed .sidebar-section { display:none; }
+  #sidebar.collapsed .sidebar-bottom .sidebar-label { display:none; }
+  #sidebar.collapsed .nav-link-text { opacity:0; width:0; overflow:hidden; }
+  #main.sidebar-collapsed { margin-left:64px; }
+  /* 40x40 centered hit targets */
+  #sidebar.collapsed .nav-item { justify-content:center; padding:10px; width:40px; height:40px; margin:2px auto; }
+  #sidebar.collapsed .nav-item svg { width:18px; height:18px; }
+  /* Logo row stacks vertically (shield on top, chevron below) */
+  #sidebar.collapsed > div:first-child { flex-direction:column; gap:8px; justify-content:center; padding:12px 0 10px; }
+  #sidebar.collapsed > div:first-child > div { justify-content:center; }
+  #sidebar.collapsed > div:first-child img { width:28px; height:28px; }
+  #sidebar.collapsed > div:first-child button { width:28px; height:28px; display:flex; align-items:center; justify-content:center; }
+  /* Dashboard nav container centers its single child */
+  #sidebar.collapsed > div:nth-child(3) { display:flex; justify-content:center; padding:6px 0; }
+  /* Bottom section stacks avatar + buttons centered */
+  #sidebar.collapsed .sidebar-bottom { padding:8px 0; display:flex; flex-direction:column; align-items:center; gap:4px; }
+  #sidebar.collapsed .sidebar-bottom > div { justify-content:center; padding:0; gap:0; }
+  /* User avatar stays a 32x32 circle (larger than nav icons, signals identity) */
+  #sidebar.collapsed .sidebar-bottom > div > div:first-child { width:32px; height:32px; font-size:12px; }
+}
+
+/* Mobile responsive sidebar — treat phones in both orientations as "mobile".
+   Portrait phones are narrow (< 768px). Landscape phones are short (< 500px tall
+   — Pixel/Galaxy/iPhone all have height < 500 in landscape). Tablets in
+   landscape have height ≥ 768 and keep the desktop persistent sidebar. */
+@media (max-width: 767px), (max-height: 500px) {
+  /* Off-canvas drawer — always 280px when open, regardless of .collapsed state
+     (which is desktop-only now and has no effect here) */
+  #sidebar { transform:translateX(-100%); width:280px !important; transition:transform .3s cubic-bezier(.4,0,.2,1); }
+  #sidebar.mobile-open { transform:translateX(0); }
+  #main { margin-left:0 !important; }
+  #mobile-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:39; display:none; }
+  #mobile-backdrop.open { display:block; }
+  #mobile-trigger { display:flex; }
+  /* Reserve space for the hamburger in any page heading tagged with this class */
+  .page-header-row { padding-left: 3rem !important; }
+}
+@media (min-width: 768px) and (min-height: 501px) {
+  #mobile-backdrop { display:none !important; }
+  #mobile-trigger { display:none !important; }
+}
+
+/* ── Alert Queue Drawer ──────────────────────────────────────── */
+#alerts-drawer {
+  position:fixed; right:0; top:0; bottom:0; width:380px;
+  background:var(--bg-surface); border-left:1px solid var(--border);
+  z-index:45; transform:translateX(100%);
+  transition:transform .3s cubic-bezier(.4,0,.2,1);
+  display:flex; flex-direction:column;
+  box-shadow:var(--shadow-md);
+}
+#alerts-drawer.open { transform:translateX(0); }
+#alerts-backdrop {
+  position:fixed; inset:0; background:rgba(0,0,0,.4);
+  z-index:44; opacity:0; pointer-events:none;
+  transition:opacity .25s;
+}
+#alerts-backdrop.open { opacity:1; pointer-events:auto; }
+
+.alert-card {
+  padding:14px 16px 14px 14px;
+  border-bottom:1px solid var(--border);
+  cursor:pointer;
+  transition:background .15s;
+  position:relative;
+}
+.alert-card:hover { background:var(--bg-hover); }
+.alert-card:last-child { border-bottom:none; }
+
+.alert-dismiss {
+  position:absolute; top:10px; right:10px;
+  width:22px; height:22px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  color:var(--text-muted); cursor:pointer;
+  font-size:18px; line-height:1;
+  background:transparent; border:none;
+}
+.alert-dismiss:hover { background:var(--bg-hover); color:var(--text-primary); }
+
+.alert-badge {
+  position:absolute; top:-5px; right:-5px;
+  min-width:18px; height:18px; padding:0 5px;
+  border-radius:9999px;
+  background:var(--risk-top-text); color:#fff;
+  font-size:10px; font-weight:700;
+  display:flex; align-items:center; justify-content:center;
+  pointer-events:none;
+  border:2px solid var(--bg-page);
+}
+
+/* On small tablets + phones, let the alerts drawer go full-width so it
+   doesn't shrink the legible context area too much */
+@media (max-width: 639px) {
+  #alerts-drawer { width:100%; }
+}
+
+/* Touch-device baseline — bump interactive element heights so finger taps land.
+   Apple HIG recommends 44×44; 40px with natural margin gets us there. Only
+   applies to devices without hover (phones/tablets), leaving mouse-pointer
+   desktops with the denser default layout. */
+@media (hover: none) {
+  .nav-item { min-height: 40px; }
+  .tier-btn { min-height: 36px; }
+  .tab-btn  { min-height: 40px; }
+  #mobile-trigger { min-width: 44px; min-height: 44px; box-shadow: var(--shadow-md); }
+}
+
+/* ── Entity Network Graph ────────────────────────────────────── */
+.network-card { transition: max-height .3s ease; overflow: hidden; }
+.network-card.collapsed { max-height: 64px; }
+.network-card:not(.collapsed) { max-height: 640px; }
+
+#chart-network { width: 100%; min-height: 260px; display: block; }
+#chart-network svg { display: block; width: 100%; height: auto; }
+
+#chart-network .node {
+  cursor: pointer;
+  transition: stroke-width .15s;
+}
+#chart-network .node-group:hover .node {
+  stroke: var(--accent) !important;
+  stroke-width: 3 !important;
+}
+
+#chart-network .link {
+  stroke-opacity: 0.65;
+  pointer-events: stroke;
+}
+#chart-network .link-dob         { stroke: var(--risk-top-text);  stroke-width: 2; }
+#chart-network .link-institution { stroke: var(--risk-high-text); stroke-width: 1.4; stroke-dasharray: 4 3; }
+
+#chart-network .node-label {
+  font-size: 10px;
+  font-weight: 500;
+  pointer-events: none;
+  user-select: none;
+}
+
+.network-legend-swatch {
+  width: 18px;
+  height: 3px;
+  display: inline-block;
+  margin-right: 6px;
+  vertical-align: middle;
+  border-radius: 2px;
+}

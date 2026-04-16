@@ -6,11 +6,11 @@
     var isAnalyst = User.IsInRole("Analyst") || isAdmin;
 }
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en" :class="{ dark: isDark }">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AIM — FinCEN Suspicious Activity Monitor</title>
+  <title>AIM — Suspicious Activity Monitor</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -21,10 +21,14 @@
   </script>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/css/theme.css">
 
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.9/dist/cdn.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.48.0/dist/apexcharts.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
 
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.0/styles/ag-grid.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.0/styles/ag-theme-alpine.css">
@@ -34,132 +38,136 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <style>
-    body { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; }
+    .leaflet-container { background:var(--ag-header-bg) !important; }
+    .leaflet-control-zoom a { background:var(--bg-input) !important; color:var(--text-secondary) !important; border-color:var(--border-input) !important; }
+    .leaflet-bar { border:none !important; box-shadow:var(--shadow-md) !important; }
+    .leaflet-control-attribution { background:rgba(7,11,22,.8) !important; color:var(--ag-header-text) !important; font-size:10px !important; }
+    .leaflet-control-attribution a { color:var(--accent-light) !important; }
 
-    .leaflet-container { background:#0d1321 !important; }
-    .leaflet-control-zoom a { background:#1e293b !important; color:#94a3b8 !important; border-color:#334155 !important; }
-    .leaflet-bar { border:none !important; box-shadow:0 2px 8px rgba(0,0,0,.5) !important; }
-    .leaflet-control-attribution { background:rgba(7,11,22,.8) !important; color:#475569 !important; font-size:10px !important; }
-    .leaflet-control-attribution a { color:#60a5fa !important; }
+    /* sidebar + main layout rules are in theme.css */
 
-    #sidebar { position:fixed; left:0; top:0; bottom:0; width:232px; background:#0b0f1e; border-right:1px solid #1e293b; display:flex; flex-direction:column; z-index:40; }
-    #main    { margin-left:232px; min-height:100vh; background:#070b16; }
+    /* mobile responsive rules are in theme.css */
 
     .ag-theme-alpine-dark {
-      --ag-background-color:#111827; --ag-header-background-color:#0d1321;
-      --ag-odd-row-background-color:#0f1629; --ag-row-hover-color:rgba(59,130,246,.06);
-      --ag-selected-row-background-color:rgba(59,130,246,.12); --ag-border-color:#1e293b;
-      --ag-header-foreground-color:#475569; --ag-foreground-color:#e2e8f0;
+      --ag-background-color:var(--ag-bg); --ag-header-background-color:var(--ag-header-bg);
+      --ag-odd-row-background-color:var(--ag-row-alt-bg); --ag-row-hover-color:var(--ag-selected-bg);
+      --ag-selected-row-background-color:rgba(59,130,246,.12); --ag-border-color:var(--ag-border);
+      --ag-header-foreground-color:var(--ag-header-text); --ag-foreground-color:var(--ag-text);
       --ag-font-size:13px; --ag-row-height:44px; --ag-header-height:40px;
       --ag-cell-horizontal-padding:14px; --ag-font-family:'Inter', ui-sans-serif, system-ui, sans-serif;
     }
     .ag-theme-alpine-dark .ag-header-cell-text { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; }
-    .ag-theme-alpine-dark .ag-row { border-bottom:1px solid #1e293b; cursor:pointer; }
+    .ag-theme-alpine-dark .ag-row { border-bottom:1px solid var(--ag-border); cursor:pointer; }
     .ag-theme-alpine-dark .ag-root-wrapper { border:none; }
 
-    .rb { display:inline-flex; align-items:center; padding:2px 8px; border-radius:9999px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; white-space:nowrap; }
-    .rb-TOP      { background:rgba(239,68,68,.15);  color:#f87171; border:1px solid rgba(239,68,68,.3); }
-    .rb-HIGH     { background:rgba(249,115,22,.15); color:#fb923c; border:1px solid rgba(249,115,22,.3); }
-    .rb-MODERATE { background:rgba(234,179,8,.15);  color:#fbbf24; border:1px solid rgba(234,179,8,.3); }
-    .rb-LOW      { background:rgba(34,197,94,.15);  color:#4ade80; border:1px solid rgba(34,197,94,.3); }
-
-    .sb { display:inline-flex; align-items:center; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; white-space:nowrap; }
-    .sb-Draft         { background:#1e293b; color:#94a3b8; }
-    .sb-PendingReview { background:rgba(234,179,8,.15); color:#fbbf24; }
-    .sb-Approved      { background:rgba(14,165,233,.15); color:#38bdf8; }
-    .sb-Submitted     { background:rgba(99,102,241,.15); color:#a5b4fc; }
-    .sb-Acknowledged  { background:rgba(16,185,129,.15); color:#34d399; }
-    .sb-Rejected      { background:rgba(239,68,68,.15); color:#f87171; }
-
-    #drawer { position:fixed; right:0; top:0; bottom:0; width:520px; background:#0f172a; border-left:1px solid #1e293b; z-index:50; display:flex; flex-direction:column; transform:translateX(100%); transition:transform .3s cubic-bezier(.4,0,.2,1); overflow-y:auto; }
-    #drawer.open { transform:translateX(0); }
-    #backdrop { position:fixed; inset:0; background:rgba(0,0,0,.55); backdrop-filter:blur(2px); z-index:49; opacity:0; pointer-events:none; transition:opacity .3s; }
-    #backdrop.open { opacity:1; pointer-events:auto; }
-
-    .nav-item { display:flex; align-items:center; gap:9px; padding:7px 12px; border-radius:7px; cursor:pointer; transition:all .15s; color:#475569; font-size:13px; font-weight:500; }
-    .nav-item:hover { background:#1e293b; color:#cbd5e1; }
-    .nav-item.active { background:rgba(59,130,246,.12); color:#93c5fd; }
+    /* nav-item styles are in theme.css */
     .tier-btn { display:flex; align-items:center; justify-content:space-between; padding:6px 12px; border-radius:6px; cursor:pointer; transition:all .15s; font-size:12px; font-weight:500; }
     .tier-btn:hover { background:rgba(30,41,59,.4); }
 
-    ::-webkit-scrollbar { width:5px; height:5px; }
-    ::-webkit-scrollbar-thumb { background:#334155; border-radius:3px; }
-    ::-webkit-scrollbar-track { background:transparent; }
-    .tab-btn { padding:8px 12px; font-size:12px; font-weight:500; border-bottom:2px solid transparent; color:#475569; cursor:pointer; }
-    .tab-btn.active { border-bottom-color:#3b82f6; color:#60a5fa; }
+    .tab-btn { padding:8px 12px; font-size:12px; font-weight:500; border-bottom:2px solid transparent; color:var(--ag-header-text); cursor:pointer; }
+    .tab-btn.active { border-bottom-color:var(--accent-light); color:var(--accent-light); }
 
     .toast-wrap { position:fixed; bottom:24px; right:24px; z-index:100; display:flex; flex-direction:column; gap:8px; }
     .toast { padding:10px 14px; border-radius:8px; font-size:12px; font-weight:500; }
-    .toast-info    { background:#0c1a2e; border:1px solid #1e3a5f; color:#93c5fd; }
-    .toast-success { background:#052e16; border:1px solid #14532d; color:#86efac; }
-    .toast-error   { background:#1c0909; border:1px solid #450a0a; color:#fca5a5; }
   </style>
 </head>
-<body class="bg-[#070b16] text-slate-100 antialiased">
+<body class="antialiased" style="background:var(--bg-page);color:var(--text-primary)">
 
 <div x-data="aim()" x-init="init()">
 
-  <aside id="sidebar">
-    <div class="px-4 pt-4 pb-3 border-b border-slate-800">
-      <div class="text-xs uppercase tracking-widest text-slate-500">AIM</div>
-      <div class="text-sm font-semibold text-slate-200">FinCEN Monitor</div>
+  <!-- Mobile hamburger trigger -->
+  <button id="mobile-trigger" @@click="mobileOpen = !mobileOpen"
+    class="fixed top-3 left-3 z-50 p-2 rounded-lg transition-opacity"
+    :class="{ 'opacity-0 pointer-events-none': mobileOpen }"
+    style="background:var(--bg-sidebar);color:var(--text-on-dark)"
+    aria-label="Open sidebar navigation">
+    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+  </button>
+
+  <!-- Mobile backdrop -->
+  <div id="mobile-backdrop" :class="{'open': mobileOpen}" @@click="mobileOpen = false"></div>
+
+  <aside id="sidebar" :class="{'collapsed': sidebarCollapsed, 'mobile-open': mobileOpen}">
+    <!-- Logo + collapse toggle -->
+    <div class="flex items-center justify-between px-3 pt-4 pb-3 border-b" style="border-color:var(--border)">
+      <div class="flex items-center gap-2 min-w-0">
+        <img src="/images/AimLogo.svg" alt="AIM" class="w-7 h-7 flex-shrink-0" />
+        <span class="sidebar-label text-sm font-bold" style="color:var(--text-on-dark)">AIM</span>
+      </div>
+      <button @@click="mobileOpen ? (mobileOpen = false) : toggleSidebar()" class="sidebar-collapse-chevron p-1 rounded hover:bg-white/10 flex-shrink-0" style="color:var(--text-muted)" :title="mobileOpen ? 'Close sidebar' : 'Toggle sidebar'">
+        <svg :style="sidebarCollapsed ? 'transform:rotate(180deg)' : ''" style="transition:transform .25s" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 16 16"><path d="M10 3L5 8l5 5"/></svg>
+      </button>
     </div>
 
-    <nav class="p-3 flex-1 overflow-y-auto space-y-4">
+    <!-- Page navigation -->
+    <div class="p-2 border-b" style="border-color:var(--border)">
+      <a href="/" class="nav-item active mb-1" title="Dashboard">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 16 16" class="flex-shrink-0"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+        <span class="nav-link-text">Dashboard</span>
+      </a>
+    </div>
+
+    <!-- Filters (hidden when collapsed) -->
+    <nav class="p-3 flex-1 overflow-y-auto space-y-4 sidebar-section">
       <div>
-        <div class="text-[10px] uppercase tracking-widest text-slate-600 px-2 mb-2">Entity</div>
+        <div class="text-[10px] uppercase tracking-widest px-2 mb-2" style="color:var(--text-muted)">Entity</div>
         <input x-model="filters.search" @@input.debounce.300ms="reload()" type="text"
           placeholder="Search subject name…"
-          class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs placeholder-slate-600 focus:outline-none focus:border-blue-500" />
+          class="w-full rounded px-2 py-1.5 text-xs focus:outline-none"
+          style="background:var(--sidebar-input-bg);border:1px solid var(--sidebar-input-border);color:var(--sidebar-input-text)" />
       </div>
 
       <div>
-        <div class="text-[10px] uppercase tracking-widest text-slate-600 px-2 mb-2">Residence Location</div>
+        <div class="text-[10px] uppercase tracking-widest px-2 mb-2" style="color:var(--text-muted)">Residence Location</div>
         <select x-model="filters.subjectState" @@change="reload()"
-          class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500">
+          class="w-full rounded px-2 py-1.5 text-xs focus:outline-none"
+          style="background:var(--sidebar-input-bg);border:1px solid var(--sidebar-input-border);color:var(--sidebar-input-text)">
           <option value="">All states</option>
           <template x-for="s in filterOpts.subjectStates" :key="s"><option :value="s" x-text="s"></option></template>
         </select>
       </div>
 
       <div>
-        <div class="text-[10px] uppercase tracking-widest text-slate-600 px-2 mb-2">Activity Location</div>
+        <div class="text-[10px] uppercase tracking-widest px-2 mb-2" style="color:var(--text-muted)">Activity Location</div>
         <select x-model="filters.institutionState" @@change="reload()"
-          class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500">
+          class="w-full rounded px-2 py-1.5 text-xs focus:outline-none"
+          style="background:var(--sidebar-input-bg);border:1px solid var(--sidebar-input-border);color:var(--sidebar-input-text)">
           <option value="">All states</option>
           <template x-for="s in filterOpts.institutionStates" :key="s"><option :value="s" x-text="s"></option></template>
         </select>
       </div>
 
       <div>
-        <div class="text-[10px] uppercase tracking-widest text-slate-600 px-2 mb-2">Transaction Type</div>
+        <div class="text-[10px] uppercase tracking-widest px-2 mb-2" style="color:var(--text-muted)">Transaction Type</div>
         <select x-model="filters.transactionType" @@change="reload()"
-          class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500">
+          class="w-full rounded px-2 py-1.5 text-xs focus:outline-none"
+          style="background:var(--sidebar-input-bg);border:1px solid var(--sidebar-input-border);color:var(--sidebar-input-text)">
           <option value="">All types</option>
           <template x-for="t in filterOpts.transactionTypes" :key="t"><option :value="t" x-text="t"></option></template>
         </select>
       </div>
 
       <div>
-        <div class="text-[10px] uppercase tracking-widest text-slate-600 px-2 mb-2">Risk Level</div>
+        <div class="text-[10px] uppercase tracking-widest px-2 mb-2" style="color:var(--text-muted)">Risk Level</div>
         <div class="flex flex-col gap-1">
-          <div class="tier-btn" :class="{'bg-slate-800': filters.riskLevel.length === 0}" @@click="setRisk('')">
-            <span>All</span>
-            <span class="text-slate-500" x-text="baselineByRisk.__total || 0"></span>
+          <div class="tier-btn" :style="filters.riskLevel.length === 0 ? 'background:var(--sidebar-input-bg)' : ''" @@click="setRisk('')">
+            <span style="color:var(--text-on-dark)">All</span>
+            <span style="color:var(--text-muted)" x-text="baselineByRisk.__total || 0"></span>
           </div>
           <template x-for="t in ['TOP','HIGH','MODERATE','LOW']" :key="t">
-            <div class="tier-btn" :class="{'bg-slate-800': filters.riskLevel.includes(t)}" @@click="setRisk(t)">
+            <div class="tier-btn" :style="filters.riskLevel.includes(t) ? 'background:var(--sidebar-input-bg)' : ''" @@click="setRisk(t)">
               <span class="rb" :class="'rb-'+t" x-text="t"></span>
-              <span class="text-slate-500" x-text="baselineByRisk[t] || 0"></span>
+              <span style="color:var(--text-muted)" x-text="baselineByRisk[t] || 0"></span>
             </div>
           </template>
         </div>
       </div>
 
       <div>
-        <div class="text-[10px] uppercase tracking-widest text-slate-600 px-2 mb-2">Window</div>
+        <div class="text-[10px] uppercase tracking-widest px-2 mb-2" style="color:var(--text-muted)">Window</div>
         <select x-model="filters.window" @@change="applyWindow(); reload()"
-          class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500">
+          class="w-full rounded px-2 py-1.5 text-xs focus:outline-none"
+          style="background:var(--sidebar-input-bg);border:1px solid var(--sidebar-input-border);color:var(--sidebar-input-text)">
           <option value="90">Last 90 Days</option>
           <option value="180">Last 180 Days</option>
           <option value="365">Last Year</option>
@@ -168,171 +176,361 @@
       </div>
 
       <div>
-        <div class="text-[10px] uppercase tracking-widest text-slate-600 px-2 mb-2">Date Range</div>
+        <div class="text-[10px] uppercase tracking-widest px-2 mb-2" style="color:var(--text-muted)">Date Range</div>
         <input x-model="filters.dateFrom" @@change="reload()" type="date"
-          class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs mb-1 focus:outline-none focus:border-blue-500" />
+          class="w-full rounded px-2 py-1.5 text-xs mb-1 focus:outline-none"
+          style="background:var(--sidebar-input-bg);border:1px solid var(--sidebar-input-border);color:var(--sidebar-input-text)" />
         <input x-model="filters.dateTo" @@change="reload()" type="date"
-          class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500" />
+          class="w-full rounded px-2 py-1.5 text-xs focus:outline-none"
+          style="background:var(--sidebar-input-bg);border:1px solid var(--sidebar-input-border);color:var(--sidebar-input-text)" />
       </div>
     </nav>
 
-    <div class="px-4 py-3 border-t border-slate-800 text-xs">
-      <div class="text-slate-400" x-text="'@displayName'"></div>
-      <div class="text-slate-600">@(isAdmin ? "Admin" : (isAnalyst ? "Analyst" : "Viewer"))</div>
-      <a href="/Identity/Account/Logout" class="text-blue-400 hover:underline text-[11px]">Sign out</a>
+    <!-- Bottom: user info + theme toggle -->
+    <div class="px-3 py-3 border-t sidebar-bottom" style="border-color:var(--border)">
+      <button @@click="toggleTheme()" class="nav-item w-full mb-2" title="Toggle theme">
+        <template x-if="isDark"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 16 16" class="flex-shrink-0"><circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41"/></svg></template>
+        <template x-if="!isDark"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 16 16" class="flex-shrink-0"><path d="M13.5 8.5a5.5 5.5 0 1 1-7-7 7 7 0 0 0 7 7z"/></svg></template>
+        <span class="nav-link-text" x-text="isDark ? 'Light Mode' : 'Dark Mode'"></span>
+      </button>
+      <div class="flex items-center gap-2 px-3 py-1">
+        <div class="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0" style="background:var(--accent);color:#fff" x-text="('@displayName')[0]?.toUpperCase()"></div>
+        <div class="nav-link-text min-w-0">
+          <div class="text-xs truncate" style="color:var(--text-on-dark)" x-text="'@displayName'"></div>
+          <div class="text-[10px]" style="color:var(--text-muted)">@(isAdmin ? "Admin" : (isAnalyst ? "Analyst" : "Viewer"))</div>
+        </div>
+      </div>
+      <a href="/Identity/Account/Logout" class="nav-item mt-1" title="Sign out">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 16 16" class="flex-shrink-0"><path d="M6 14H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h3M11 11l3-3-3-3M6 8h8"/></svg>
+        <span class="nav-link-text">Sign out</span>
+      </a>
     </div>
   </aside>
 
-  <main id="main" class="p-6">
-    <div class="flex items-center justify-between mb-5">
-      <div>
-        <h1 class="text-xl font-semibold">BSA Suspicious Activity Dashboard</h1>
-        <p class="text-xs text-slate-500">Adaptive Intelligence Monitor · FinCEN analytics</p>
+  <main id="main" class="p-4 sm:p-6" :class="{'sidebar-collapsed': sidebarCollapsed}">
+    <div class="page-header-row flex flex-wrap items-center justify-between gap-3 mb-5">
+      <div class="min-w-0">
+        <h1 class="text-lg sm:text-xl font-semibold" style="color:var(--text-primary)">BSA Suspicious Activity Dashboard</h1>
+        <p class="text-xs" style="color:var(--text-muted)">Adaptive Intelligence Monitor · Suspicious activity analytics</p>
       </div>
-      <div class="flex items-center gap-2">
-        <button @@click="exportCsv()" class="bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-md px-3 py-1.5 text-xs text-slate-300">Export CSV</button>
+      <div class="flex items-center gap-2 flex-wrap">
+        <button @@click="alertsOpen = true" class="relative rounded-md px-3 py-1.5 text-xs flex items-center gap-1.5"
+          style="background:var(--bg-surface);border:1px solid var(--border);color:var(--text-secondary)"
+          title="View alerts">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span>Alerts</span>
+          <span x-show="unreadAlertCount > 0" class="alert-badge" x-text="unreadAlertCount"></span>
+        </button>
+        <button @@click="exportCsv()" class="rounded-md px-3 py-1.5 text-xs"
+          style="background:var(--bg-surface);border:1px solid var(--border);color:var(--text-secondary)">Export CSV</button>
         @if (isAnalyst)
         {
-          <a href="/Filing" class="bg-blue-600 hover:bg-blue-500 rounded-md px-3 py-1.5 text-xs text-white font-medium">Filing Queue</a>
+          <a href="/Filing" class="rounded-md px-3 py-1.5 text-xs text-white font-medium" style="background:var(--accent)">Filing Queue</a>
         }
         @if (isAdmin)
         {
-          <a href="/Import" class="bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-md px-3 py-1.5 text-xs text-slate-300">Bulk Import</a>
+          <a href="/Import" class="rounded-md px-3 py-1.5 text-xs"
+            style="background:var(--bg-surface);border:1px solid var(--border);color:var(--text-secondary)">Bulk Import</a>
         }
       </div>
     </div>
 
-    <div class="grid grid-cols-5 gap-3 mb-5">
-      <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-        <div class="text-[10px] uppercase tracking-widest text-slate-500">Total Entities</div>
-        <div class="text-2xl font-semibold mt-1" x-text="kpi.totalEntities.toLocaleString()"></div>
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
+      <div class="rounded-lg p-4 flex flex-col justify-between min-h-[88px]" style="background:var(--bg-surface);border:1px solid var(--border)">
+        <div class="text-[10px] uppercase tracking-widest" style="color:var(--text-muted)">Total Entities</div>
+        <div class="text-xl font-semibold mt-1 truncate" style="color:var(--text-primary)" x-text="kpi.totalEntities.toLocaleString()"></div>
       </div>
-      <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-        <div class="text-[10px] uppercase tracking-widest text-slate-500">Total Transactions</div>
-        <div class="text-2xl font-semibold mt-1" x-text="kpi.totalTransactions.toLocaleString()"></div>
+      <div class="rounded-lg p-4 flex flex-col justify-between min-h-[88px]" style="background:var(--bg-surface);border:1px solid var(--border)">
+        <div class="text-[10px] uppercase tracking-widest" style="color:var(--text-muted)">Total Transactions</div>
+        <div class="text-xl font-semibold mt-1 truncate" style="color:var(--text-primary)" x-text="kpi.totalTransactions.toLocaleString()"></div>
       </div>
-      <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-        <div class="text-[10px] uppercase tracking-widest text-slate-500">Total Amount</div>
-        <div class="text-2xl font-semibold mt-1" x-text="fmtMoney(kpi.totalAmount)"></div>
+      <div class="rounded-lg p-4 flex flex-col justify-between min-h-[88px]" style="background:var(--bg-surface);border:1px solid var(--border)">
+        <div class="text-[10px] uppercase tracking-widest" style="color:var(--text-muted)">Total Amount</div>
+        <div class="text-lg font-semibold mt-1 truncate" style="color:var(--text-primary)" x-text="fmtMoney(kpi.totalAmount)"></div>
       </div>
-      <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-        <div class="text-[10px] uppercase tracking-widest text-slate-500">Avg Transaction</div>
-        <div class="text-2xl font-semibold mt-1" x-text="fmtMoney(kpi.averageTransaction)"></div>
+      <div class="rounded-lg p-4 flex flex-col justify-between min-h-[88px]" style="background:var(--bg-surface);border:1px solid var(--border)">
+        <div class="text-[10px] uppercase tracking-widest" style="color:var(--text-muted)">Avg Transaction</div>
+        <div class="text-lg font-semibold mt-1 truncate" style="color:var(--text-primary)" x-text="fmtMoney(kpi.averageTransaction)"></div>
       </div>
-      <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-        <div class="text-[10px] uppercase tracking-widest text-slate-500">TOP + HIGH Entities</div>
-        <div class="text-2xl font-semibold mt-1 text-orange-400" x-text="kpi.topAndHighEntities.toLocaleString()"></div>
+      <div class="rounded-lg p-4 flex flex-col justify-between min-h-[88px]" style="background:var(--bg-surface);border:1px solid var(--border)">
+        <div class="text-[10px] uppercase tracking-widest" style="color:var(--text-muted)">TOP + HIGH Entities</div>
+        <div class="text-xl font-semibold mt-1 truncate" style="color:var(--risk-high-text)" x-text="kpi.topAndHighEntities.toLocaleString()"></div>
       </div>
     </div>
 
-    <div class="grid grid-cols-2 gap-4 mb-5">
-      <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-        <div class="text-sm font-medium mb-2">Risk Distribution</div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
+      <div class="rounded-lg p-4" style="background:var(--bg-surface);border:1px solid var(--border)">
+        <div class="text-sm font-medium mb-2" style="color:var(--text-primary)">Risk Distribution</div>
         <div id="chart-risk"></div>
       </div>
-      <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-        <div class="text-sm font-medium mb-2">Filings by Institution State (top 10)</div>
+      <div class="rounded-lg p-4" style="background:var(--bg-surface);border:1px solid var(--border)">
+        <div class="text-sm font-medium mb-2" style="color:var(--text-primary)">Filings by Institution State (top 10)</div>
         <div id="chart-state"></div>
       </div>
     </div>
 
-    <div class="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
-      <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
-        <div class="text-sm font-medium">Entities <span class="text-slate-500 text-xs ml-2" x-text="'('+rows.length+' records)'"></span></div>
+    <!-- Entity Network Graph -->
+    <div class="network-card rounded-lg mb-5" :class="{ collapsed: !networkExpanded }"
+      style="background:var(--bg-surface);border:1px solid var(--border)">
+      <div class="px-4 py-3 flex items-center justify-between cursor-pointer select-none"
+        @@click="toggleNetwork()"
+        :style="networkExpanded ? 'border-bottom:1px solid var(--border)' : ''">
+        <div>
+          <div class="text-sm font-medium" style="color:var(--text-primary)">
+            Entity Network
+            <span class="text-xs ml-2" style="color:var(--text-muted)"
+              x-text="'(' + (network.nodes?.length || 0) + ' entities, ' + (network.edges?.length || 0) + ' connections)'"></span>
+          </div>
+          <div class="text-xs mt-0.5" style="color:var(--text-muted)">Relationships between high-risk entities</div>
+        </div>
+        <div class="flex items-center gap-3">
+          <!-- Legend (only visible when expanded; hidden on mobile to keep header compact) -->
+          <div x-show="networkExpanded" class="hidden md:flex items-center gap-4 text-xs" style="color:var(--text-muted)">
+            <span class="flex items-center"><span class="network-legend-swatch" style="background:var(--risk-top-text)"></span>Same DOB</span>
+            <span class="flex items-center"><span class="network-legend-swatch" style="background:var(--risk-high-text);border-top:1px dashed var(--risk-high-text)"></span>Same institution</span>
+          </div>
+          <svg :style="networkExpanded ? 'transform:rotate(180deg)' : ''" style="transition:transform .25s"
+            width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 16 16">
+            <path d="M3 6l5 5 5-5"/>
+          </svg>
+        </div>
       </div>
-      <div id="grid" class="ag-theme-alpine-dark" style="height: 520px;"></div>
+      <div x-show="networkExpanded" class="p-4">
+        <div x-show="network.nodes && network.nodes.length > 0" id="chart-network"></div>
+        <div x-show="!network.nodes || network.nodes.length === 0"
+          class="flex items-center justify-center" style="height:220px;color:var(--text-muted)">
+          No high-risk entities to map
+        </div>
+      </div>
     </div>
 
-    <div x-show="view==='geographic'" class="bg-slate-900 border border-slate-800 rounded-lg mt-5 p-4">
-      <div class="text-sm font-medium mb-3">Geographic Distribution (Institution State)</div>
+    <div class="rounded-lg overflow-hidden" style="background:var(--bg-surface);border:1px solid var(--border)">
+      <div class="px-4 py-3 flex items-center justify-between" style="border-bottom:1px solid var(--border)">
+        <div class="text-sm font-medium" style="color:var(--text-primary)">Entities <span class="text-xs ml-2" style="color:var(--text-muted)" x-text="'('+rows.length+' records)'"></span></div>
+      </div>
+      <div id="grid" class="ag-theme-alpine-dark" style="height: clamp(400px, 60vh, 700px);"></div>
+    </div>
+
+    <div x-show="view==='geographic'" class="rounded-lg mt-5 p-4" style="background:var(--bg-surface);border:1px solid var(--border)">
+      <div class="text-sm font-medium mb-3" style="color:var(--text-primary)">Geographic Distribution (Institution State)</div>
       <div id="map" style="height:400px; border-radius:6px;"></div>
     </div>
   </main>
 
-  <div id="backdrop" :class="{'open': drawerOpen}" @@click="closeDrawer()"></div>
-  <aside id="drawer" :class="{'open': drawerOpen}">
-    <div x-show="selected" class="flex flex-col h-full">
-      <div class="px-5 py-4 border-b border-slate-800 flex items-start justify-between">
-        <div class="flex-1">
-          <div class="text-[10px] uppercase tracking-widest text-slate-500">Entity</div>
-          <div class="text-lg font-semibold mt-0.5" x-text="selected?.subjectName || '(unnamed)'"></div>
-          <div class="flex items-center gap-2 mt-1">
-            <span class="inline-flex items-center gap-1 bg-slate-800 text-blue-300 font-mono text-xs px-2 py-0.5 rounded"
-              x-text="selected?.linkId === 'unlinked' ? '—' : selected?.linkId"></span>
-            <button @@click="copyLinkId()" class="text-slate-500 hover:text-blue-300 text-xs">⧉ Copy</button>
+  <!-- Entity Detail Modal -->
+  <div x-show="drawerOpen" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4" style="background:rgba(0,0,0,.6)" @@click.self="closeDrawer()">
+    <div x-show="drawerOpen" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100" x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95" class="w-full max-w-3xl max-h-[85vh] rounded-xl overflow-hidden flex flex-col" style="background:var(--bg-surface);border:1px solid var(--border);box-shadow:var(--shadow-md)" @@click.stop>
+      <div x-show="selected" class="flex flex-col flex-1 min-h-0">
+        <!-- Header -->
+        <div class="px-4 sm:px-6 py-4 flex items-start justify-between gap-2 flex-shrink-0" style="border-bottom:1px solid var(--border)">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-3 flex-wrap gap-y-1">
+              <span class="rb" :class="'rb-'+selected?.riskLevel" x-text="selected?.riskLevel"></span>
+              <span class="text-xs font-medium" style="color:var(--text-muted)" x-text="'Score: ' + (selected?.riskScore || '—')"></span>
+              <span class="text-xs" style="color:var(--text-muted)" x-text="(selected?.transactionCount || 0) + ' filings'"></span>
+            </div>
+            <div class="text-lg font-semibold mt-1" style="color:var(--text-primary)" x-text="selected?.subjectName || '(unnamed)'"></div>
+            <div class="flex items-center gap-2 mt-1">
+              <span class="inline-flex items-center gap-1 font-mono text-xs px-2 py-0.5 rounded"
+                style="background:var(--sidebar-input-bg);color:var(--accent-light)"
+                x-text="selected?.linkId === 'unlinked' ? '—' : selected?.linkId"></span>
+              <button @@click="copyLinkId()" class="text-xs" style="color:var(--text-muted)">&#10697; Copy</button>
+            </div>
+          </div>
+          <button @@click="closeDrawer()" class="text-2xl leading-none p-1 rounded hover:bg-black/10" style="color:var(--text-muted)">&times;</button>
+        </div>
+
+        <!-- Tabs -->
+        <div class="px-4 flex flex-shrink-0" style="border-bottom:1px solid var(--border)">
+          <template x-for="t in ['overview','transactions','institution','transitions']" :key="t">
+            <div class="tab-btn" :class="{active: tab===t}" @@click="tab=t" x-text="t"></div>
+          </template>
+        </div>
+
+        <!-- Tab Content -->
+        <div class="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 text-sm">
+          <div x-show="tab==='overview'" class="space-y-4">
+            <dl class="grid grid-cols-2 sm:grid-cols-3 gap-y-3 gap-x-6 text-xs">
+              <div>
+                <dt style="color:var(--text-muted)" class="mb-0.5">Subject Name</dt>
+                <dd class="font-medium" style="color:var(--text-primary)" x-text="selected?.subjectName || '—'"></dd>
+              </div>
+              <div>
+                <dt style="color:var(--text-muted)" class="mb-0.5">Subject DOB</dt>
+                <dd class="font-medium" style="color:var(--text-primary)" x-text="selected?.subjectDob || '—'"></dd>
+              </div>
+              <div>
+                <dt style="color:var(--text-muted)" class="mb-0.5">EIN/SSN (masked)</dt>
+                <dd class="font-medium" style="color:var(--text-primary)" x-text="maskSsn(selected?.subjectEinSsn)"></dd>
+              </div>
+              <div>
+                <dt style="color:var(--text-muted)" class="mb-0.5">Total Amount</dt>
+                <dd class="font-medium" style="color:var(--text-primary)" x-text="fmtMoney(selected?.totalAmount)"></dd>
+              </div>
+              <div>
+                <dt style="color:var(--text-muted)" class="mb-0.5">Risk Level</dt>
+                <dd><span class="rb" :class="'rb-'+selected?.riskLevel" x-text="selected?.riskLevel"></span></dd>
+              </div>
+              <div>
+                <dt style="color:var(--text-muted)" class="mb-0.5">Risk Score</dt>
+                <dd class="font-medium" style="color:var(--text-primary)" x-text="selected?.riskScore || '—'"></dd>
+              </div>
+              <div>
+                <dt style="color:var(--text-muted)" class="mb-0.5">Latest Form Type</dt>
+                <dd class="font-medium" style="color:var(--text-primary)" x-text="selected?.formType || '—'"></dd>
+              </div>
+              <div>
+                <dt style="color:var(--text-muted)" class="mb-0.5">Latest Filing Date</dt>
+                <dd class="font-medium" style="color:var(--text-primary)" x-text="fmtDate(selected?.filingDate)"></dd>
+              </div>
+              <div>
+                <dt style="color:var(--text-muted)" class="mb-0.5">Latest BSA ID</dt>
+                <dd class="font-medium font-mono" style="color:var(--text-primary)" x-text="selected?.bsaId || '—'"></dd>
+              </div>
+              <div>
+                <dt style="color:var(--text-muted)" class="mb-0.5">Residence State</dt>
+                <dd class="font-medium" style="color:var(--text-primary)" x-text="selected?.residenceState || selected?.subjectState || '—'"></dd>
+              </div>
+              <div>
+                <dt style="color:var(--text-muted)" class="mb-0.5">Institution State</dt>
+                <dd class="font-medium" style="color:var(--text-primary)" x-text="selected?.institutionState || '—'"></dd>
+              </div>
+              <div>
+                <dt style="color:var(--text-muted)" class="mb-0.5">Zip3</dt>
+                <dd class="font-medium" style="color:var(--text-primary)" x-text="selected?.zip3 || '—'"></dd>
+              </div>
+              <div>
+                <dt style="color:var(--text-muted)" class="mb-0.5">Suspicious Activity Type</dt>
+                <dd class="font-medium" style="color:var(--text-primary)" x-text="selected?.suspiciousActivityType || '—'"></dd>
+              </div>
+              <div>
+                <dt style="color:var(--text-muted)" class="mb-0.5">Transaction Type</dt>
+                <dd class="font-medium" style="color:var(--text-primary)" x-text="selected?.transactionType || '—'"></dd>
+              </div>
+              <div>
+                <dt style="color:var(--text-muted)" class="mb-0.5">Regulator</dt>
+                <dd class="font-medium" style="color:var(--text-primary)" x-text="selected?.regulator || '—'"></dd>
+              </div>
+              <div>
+                <dt style="color:var(--text-muted)" class="mb-0.5">Institution Type</dt>
+                <dd class="font-medium" style="color:var(--text-primary)" x-text="selected?.institutionType || '—'"></dd>
+              </div>
+              <div>
+                <dt style="color:var(--text-muted)" class="mb-0.5">Status</dt>
+                <dd><span class="sb" :class="'sb-'+selected?.status" x-text="selected?.status || '—'"></span></dd>
+              </div>
+              <div>
+                <dt style="color:var(--text-muted)" class="mb-0.5">Amendment</dt>
+                <dd class="font-medium" style="color:var(--text-primary)" x-text="selected?.isAmendment ? 'Yes' : 'No'"></dd>
+              </div>
+            </dl>
+            <div class="mt-4 p-3 rounded-md text-[11px]" style="background:var(--risk-top-bg);border:1px solid var(--risk-top-border);color:var(--risk-top-text)">
+              CONFIDENTIAL — SAR disclosure is prohibited under 31 USC 5318(g)(2).
+            </div>
+          </div>
+
+          <div x-show="tab==='transactions'" class="space-y-3">
+            <div class="text-xs" style="color:var(--text-muted)" x-text="'All ' + (entityFilings.length || 0) + ' filings for this entity'"></div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-xs">
+                <thead><tr class="text-[10px] uppercase tracking-widest" style="color:var(--text-muted)">
+                  <th class="text-left py-1">Date</th>
+                  <th class="text-left py-1">BSA ID</th>
+                  <th class="text-left py-1">Form</th>
+                  <th class="text-right py-1">Amount</th>
+                  <th class="text-left py-1">Risk</th>
+                  <th class="text-left py-1">Status</th>
+                </tr></thead>
+                <tbody>
+                  <template x-for="f in entityFilings" :key="f.id">
+                    <tr style="border-top:1px solid var(--border)">
+                      <td class="py-1.5" x-text="fmtDate(f.filingDate)"></td>
+                      <td class="font-mono text-[11px]" style="color:var(--text-secondary)" x-text="f.bsaId"></td>
+                      <td x-text="f.formType"></td>
+                      <td class="text-right" x-text="fmtMoney(f.amountTotal)"></td>
+                      <td><span class="rb" :class="'rb-'+f.riskLevel" x-text="f.riskLevel"></span></td>
+                      <td><span class="sb" :class="'sb-'+f.status" x-text="f.status"></span></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+            <div class="mt-4">
+              <div class="text-[10px] uppercase tracking-widest mb-2" style="color:var(--text-muted)">Activity Over Time</div>
+              <div id="chart-subject"></div>
+            </div>
+          </div>
+
+          <div x-show="tab==='institution'" class="space-y-2 text-xs">
+            <dl class="grid grid-cols-2 gap-y-3 gap-x-6">
+              <div>
+                <dt style="color:var(--text-muted)" class="mb-0.5">Institution Type</dt>
+                <dd class="font-medium" style="color:var(--text-primary)" x-text="selected?.institutionType || '—'"></dd>
+              </div>
+              <div>
+                <dt style="color:var(--text-muted)" class="mb-0.5">Institution State</dt>
+                <dd class="font-medium" style="color:var(--text-primary)" x-text="selected?.institutionState || '—'"></dd>
+              </div>
+              <div>
+                <dt style="color:var(--text-muted)" class="mb-0.5">Regulator</dt>
+                <dd class="font-medium" style="color:var(--text-primary)" x-text="selected?.regulator || '—'"></dd>
+              </div>
+              <div>
+                <dt style="color:var(--text-muted)" class="mb-0.5">FinCEN Filing Number</dt>
+                <dd class="font-medium font-mono" style="color:var(--text-primary)" x-text="selected?.finCenFilingNumber || '—'"></dd>
+              </div>
+            </dl>
+          </div>
+
+          <div x-show="tab==='transitions'" class="space-y-2">
+            <div class="text-xs" style="color:var(--text-muted)">Filing transitions are done from the <a href="/Filing" class="hover:underline" style="color:var(--accent-light)">Filing Queue</a> on a per-filing basis. Select an individual filing in the Transactions tab to view its full detail.</div>
           </div>
         </div>
-        <button @@click="closeDrawer()" class="text-slate-500 hover:text-slate-200 text-xl leading-none">×</button>
       </div>
+    </div>
+  </div>
 
-      <div class="border-b border-slate-800 px-2 flex">
-        <template x-for="t in ['overview','transactions','institution','transitions']" :key="t">
-          <div class="tab-btn" :class="{active: tab===t}" @@click="tab=t" x-text="t"></div>
-        </template>
+  <!-- Alert Queue Drawer -->
+  <div id="alerts-backdrop" :class="{'open': alertsOpen}" @@click="alertsOpen = false"></div>
+  <aside id="alerts-drawer" :class="{'open': alertsOpen}" aria-label="Alert queue">
+    <!-- Header -->
+    <div class="px-5 py-4 flex items-start justify-between flex-shrink-0" style="border-bottom:1px solid var(--border)">
+      <div>
+        <div class="flex items-center gap-2">
+          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" style="color:var(--accent)"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <h2 class="text-base font-semibold" style="color:var(--text-primary)">Alerts</h2>
+        </div>
+        <div class="text-xs mt-0.5" style="color:var(--text-muted)" x-text="unreadAlertCount === 0 ? 'No active alerts' : (unreadAlertCount + ' active alert' + (unreadAlertCount === 1 ? '' : 's'))"></div>
       </div>
+      <button @@click="alertsOpen = false" class="text-2xl leading-none p-1 rounded hover:bg-black/10" style="color:var(--text-muted)" aria-label="Close alerts">&times;</button>
+    </div>
 
-      <div class="flex-1 overflow-y-auto p-5 text-sm">
-        <div x-show="tab==='overview'" class="space-y-3">
-          <div class="flex items-center gap-3">
-            <span class="rb" :class="'rb-'+selected?.riskLevel" x-text="selected?.riskLevel"></span>
-            <span class="text-xs text-slate-500" x-text="(selected?.transactionCount || 0) + ' filings'"></span>
-          </div>
-          <dl class="grid grid-cols-2 gap-y-2 gap-x-4 text-xs">
-            <dt class="text-slate-500">Subject DOB</dt><dd x-text="selected?.subjectDob || '—'"></dd>
-            <dt class="text-slate-500">EIN/SSN (masked)</dt><dd x-text="maskSsn(selected?.subjectEinSsn)"></dd>
-            <dt class="text-slate-500">Total Amount</dt><dd x-text="fmtMoney(selected?.totalAmount)"></dd>
-            <dt class="text-slate-500">Latest Form Type</dt><dd x-text="selected?.formType || '—'"></dd>
-            <dt class="text-slate-500">Latest Filing Date</dt><dd x-text="fmtDate(selected?.filingDate)"></dd>
-            <dt class="text-slate-500">Latest BSA ID</dt><dd x-text="selected?.bsaId || '—'"></dd>
-            <dt class="text-slate-500">Zip3</dt><dd x-text="selected?.zip3 || '—'"></dd>
-          </dl>
-          <div class="mt-4 p-3 rounded-md bg-red-950/30 border border-red-900/40 text-[11px] text-red-300">
-            CONFIDENTIAL — SAR disclosure is prohibited under 31 USC 5318(g)(2).
-          </div>
-        </div>
+    <!-- Empty state -->
+    <div x-show="unreadAlertCount === 0" class="flex-1 flex flex-col items-center justify-center p-6 text-center">
+      <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" style="color:var(--risk-low-text)"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+      <div class="mt-3 text-sm font-medium" style="color:var(--text-primary)">All clear</div>
+      <div class="mt-1 text-xs" style="color:var(--text-muted)">No high-risk entities require attention right now.</div>
+    </div>
 
-        <div x-show="tab==='transactions'" class="space-y-3">
-          <div class="text-xs text-slate-500" x-text="'All ' + (entityFilings.length || 0) + ' filings for this entity'"></div>
-          <table class="w-full text-xs">
-            <thead><tr class="text-slate-500 text-[10px] uppercase tracking-widest">
-              <th class="text-left py-1">Date</th>
-              <th class="text-left py-1">BSA ID</th>
-              <th class="text-left py-1">Form</th>
-              <th class="text-right py-1">Amount</th>
-              <th class="text-left py-1">Risk</th>
-              <th class="text-left py-1">PDF</th>
-            </tr></thead>
-            <tbody>
-              <template x-for="f in entityFilings" :key="f.id">
-                <tr class="border-t border-slate-800">
-                  <td class="py-1.5" x-text="fmtDate(f.filingDate)"></td>
-                  <td class="font-mono text-[11px] text-slate-400" x-text="f.bsaId"></td>
-                  <td x-text="f.formType"></td>
-                  <td class="text-right" x-text="fmtMoney(f.amountTotal)"></td>
-                  <td><span class="rb" :class="'rb-'+f.riskLevel" x-text="f.riskLevel"></span></td>
-                  <td><button @@click="downloadPdf(f.id)" class="text-blue-400 hover:underline text-xs">PDF</button></td>
-                </tr>
-              </template>
-            </tbody>
-          </table>
-          <div class="mt-4">
-            <div class="text-[10px] uppercase tracking-widest text-slate-500 mb-2">Activity Over Time</div>
-            <div id="chart-subject"></div>
+    <!-- Alert list -->
+    <div x-show="unreadAlertCount > 0" class="flex-1 overflow-y-auto">
+      <template x-for="a in visibleAlerts" :key="a.id">
+        <div class="alert-card" @@click="openAlertEntity(a.linkId)">
+          <button @@click.stop="dismissAlert(a.id)" class="alert-dismiss" :aria-label="'Dismiss alert for ' + (a.subject || 'entity')">&times;</button>
+          <div class="flex items-center gap-2 mb-1.5" style="padding-right:24px">
+            <span class="rb" :class="'rb-'+a.severity" x-text="a.severity"></span>
+            <span class="text-[11px]" style="color:var(--text-muted)" x-text="a.title"></span>
+          </div>
+          <div class="text-sm font-medium truncate" style="color:var(--text-primary)" x-text="a.subject || '(unnamed)'"></div>
+          <div class="flex items-center gap-3 mt-1.5 text-[11px]" style="color:var(--text-muted)">
+            <span x-text="fmtMoney(a.totalAmount)"></span>
+            <span>·</span>
+            <span x-text="a.transactionCount + ' tx'"></span>
+            <span x-show="a.lastTxDate">·</span>
+            <span x-show="a.lastTxDate" x-text="fmtDate(a.lastTxDate)"></span>
           </div>
         </div>
-
-        <div x-show="tab==='institution'" class="space-y-2 text-xs">
-          <dl class="grid grid-cols-2 gap-y-2 gap-x-4">
-            <dt class="text-slate-500">Latest Institution Type</dt><dd x-text="selected?.institutionType || '—'"></dd>
-            <dt class="text-slate-500">Latest Institution State</dt><dd x-text="selected?.institutionState || '—'"></dd>
-            <dt class="text-slate-500">Latest Regulator</dt><dd x-text="selected?.regulator || '—'"></dd>
-          </dl>
-        </div>
-
-        <div x-show="tab==='transitions'" class="space-y-2">
-          <div class="text-xs text-slate-500">Filing transitions are done from the <a href="/Filing" class="text-blue-400 hover:underline">Filing Queue</a> on a per-filing basis. Select an individual filing in the Transactions tab and use the PDF link for its full detail.</div>
-        </div>
-      </div>
+      </template>
     </div>
   </aside>
 
@@ -359,6 +557,10 @@
       ],
       view: 'overview',
 
+      isDark: localStorage.getItem('aim-theme') === 'dark' || (!localStorage.getItem('aim-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches),
+      sidebarCollapsed: localStorage.getItem('aim-sidebar') === 'collapsed',
+      mobileOpen: false,
+
       rows: [],                    // entity rows from /api/entities
       kpi: {
         totalEntities: 0, totalTransactions: 0, totalAmount: 0,
@@ -368,7 +570,7 @@
       filters: {
         search: '', subjectState: '', institutionState: '',
         transactionType: '', riskLevel: [],
-        window: '90', dateFrom: '', dateTo: ''
+        window: 'all', dateFrom: '', dateTo: ''
       },
       baselineByRisk: {},
 
@@ -379,14 +581,60 @@
       toasts: [],
       toastId: 0,
 
+      // Alerts — computed from /api/alerts; dismissal state persists in localStorage
+      alerts: [],
+      alertsOpen: false,
+      dismissedAlertIds: JSON.parse(localStorage.getItem('aim-dismissed-alerts') || '[]'),
+      get visibleAlerts() { return this.alerts.filter(a => !this.dismissedAlertIds.includes(a.id)); },
+
+      // Entity relationship graph — fetched on page load, rendered only when expanded
+      network: { nodes: [], edges: [] },
+      networkExpanded: localStorage.getItem('aim-network-expanded') === '1',
+      get unreadAlertCount() { return this.visibleAlerts.length; },
+
       isAdmin: @(User.IsInRole("Admin") ? "true" : "false"),
       isAnalyst: @(User.IsInRole("Analyst") || User.IsInRole("Admin") ? "true" : "false"),
 
       async init() {
+        // Theme: sync class on init and watch for changes
+        if (this.isDark) document.documentElement.classList.add('dark');
+        else document.documentElement.classList.remove('dark');
+
+        this.$watch('isDark', v => {
+          if (v) document.documentElement.classList.add('dark');
+          else document.documentElement.classList.remove('dark');
+          document.documentElement.classList.add('theme-transition');
+          setTimeout(() => document.documentElement.classList.remove('theme-transition'), 300);
+          // Re-render charts so they pick up new CSS vars
+          setTimeout(() => this.reload(), 50);
+          // Re-render the network graph too if it's currently visible
+          if (this._networkRendered && this.networkExpanded) {
+            setTimeout(() => this.renderNetwork(), 60);
+          }
+        });
+
+        // Sync sidebar state to main area
+        this.$watch('sidebarCollapsed', v => {
+          document.getElementById('main').classList.toggle('sidebar-collapsed', v);
+        });
+        if (this.sidebarCollapsed) document.getElementById('main').classList.add('sidebar-collapsed');
+
         this.applyWindow();
         await this.loadFilterOpts();
         await this.reload();
         this.buildGrid();
+        this.loadAlerts();       // fire-and-forget: alerts are non-critical
+        this.loadNetwork();      // same — graph renders only when user expands the card
+      },
+
+      toggleTheme() {
+        this.isDark = !this.isDark;
+        localStorage.setItem('aim-theme', this.isDark ? 'dark' : 'light');
+      },
+
+      toggleSidebar() {
+        this.sidebarCollapsed = !this.sidebarCollapsed;
+        localStorage.setItem('aim-sidebar', this.sidebarCollapsed ? 'collapsed' : 'expanded');
       },
 
       applyWindow() {
@@ -467,36 +715,48 @@
 
       buildGrid() {
         const el = document.getElementById('grid');
+        const riskOrder = { TOP: 4, HIGH: 3, MODERATE: 2, LOW: 1 };
+        // At <768px, hide lower-value columns to keep the remaining ones readable
+        // without horizontal scrolling. Subject + Risk + Score + Amount are the
+        // bare minimum for triage on a phone.
+        // Mobile = narrow viewport OR short viewport (landscape phones)
+        const isNarrow = window.matchMedia('(max-width: 767px), (max-height: 500px)').matches;
         const defs = [
           {
-            headerName: 'Link ID', field: 'linkId', width: 150, sortable: true,
-            cellRenderer: p => {
-              const v = p.value || '';
-              const isUnlinked = v === 'unlinked';
-              const label = isUnlinked ? '—' : v;
-              const pill = `<span class="inline-flex items-center gap-1 bg-slate-800 text-blue-300 font-mono text-xs px-2 py-0.5 rounded">${label}</span>`;
-              const copy = isUnlinked ? '' : `<button data-copy="${v}" title="Copy Link ID" class="ml-1 text-slate-500 hover:text-blue-300 text-xs">⧉</button>`;
-              return pill + copy;
-            }
+            headerName: 'Risk', field: 'riskLevel', width: 110,
+            cellRenderer: p => `<span class="rb rb-${p.value}">${p.value}</span>`,
+            comparator: (a, b) => (riskOrder[a] || 0) - (riskOrder[b] || 0),
+            sort: 'desc', sortIndex: 0
           },
-          { headerName: 'Subject', field: 'subjectName', flex: 1.4, minWidth: 180 },
-          { headerName: 'Transactions', field: 'transactionCount', width: 120, type: 'rightAligned' },
+          {
+            headerName: 'Score', field: 'riskScore', width: 90, type: 'rightAligned',
+            sort: 'desc', sortIndex: 1
+          },
+          { headerName: 'Subject', field: 'subjectName', flex: 1.4, minWidth: 160 },
+          { headerName: 'Transactions', field: 'transactionCount', width: 120, type: 'rightAligned', hide: isNarrow },
           {
             headerName: 'Total Amount', field: 'totalAmount', width: 140, type: 'rightAligned',
             valueFormatter: p => this.fmtMoney(p.value)
           },
-          { headerName: 'Activity', field: 'activityLocation', width: 100 },
+          { headerName: 'Activity', field: 'activityLocation', width: 100, hide: isNarrow },
           {
-            headerName: 'First Tx', field: 'firstTxDate', width: 120,
+            headerName: 'First Tx', field: 'firstTxDate', width: 120, hide: isNarrow,
             valueFormatter: p => this.fmtDate(p.value)
           },
           {
-            headerName: 'Last Tx', field: 'lastTxDate', width: 120,
+            headerName: 'Last Tx', field: 'lastTxDate', width: 120, hide: isNarrow,
             valueFormatter: p => this.fmtDate(p.value)
           },
           {
-            headerName: 'Risk', field: 'riskLevel', width: 110,
-            cellRenderer: p => `<span class="rb rb-${p.value}">${p.value}</span>`
+            headerName: 'Link ID', field: 'linkId', width: 150, hide: isNarrow,
+            cellRenderer: p => {
+              const v = p.value || '';
+              const isUnlinked = v === 'unlinked';
+              const label = isUnlinked ? '—' : v;
+              const pill = `<span class="inline-flex items-center gap-1 font-mono text-xs px-2 py-0.5 rounded" style="background:var(--sidebar-input-bg);color:var(--accent-light)">${label}</span>`;
+              const copy = isUnlinked ? '' : `<button data-copy="${v}" title="Copy Link ID" class="ml-1 text-xs" style="color:var(--text-muted)">&#10697;</button>`;
+              return pill + copy;
+            }
           },
         ];
         _g = agGrid.createGrid(el, {
@@ -517,32 +777,95 @@
             }
             this.openEntity(e.data);
           },
+          // onRowClicked is more reliable than onCellClicked across AG Grid versions —
+          // it fires for clicks on cell renderers and custom content too. Guarded so
+          // we don't double-fire when the cell handler already opened the modal.
+          onRowClicked: e => {
+            if (this.drawerOpen) return;
+            const tgt = e.event && e.event.target;
+            if (tgt && tgt.dataset && tgt.dataset.copy) return;
+            this.openEntity(e.data);
+          },
           rowSelection: 'single',
         });
+
+        // Native delegated click — bulletproof fallback. AG Grid's onCellClicked/onRowClicked
+        // can get blocked by cell renderers' inner DOM in some versions. Walking up from the
+        // click target to find the row's data attribute works regardless of render strategy.
+        if (!el.__aimClickBound) {
+          el.__aimClickBound = true;
+          el.addEventListener('click', (ev) => {
+            // Respect copy button
+            if (ev.target?.dataset?.copy) {
+              navigator.clipboard.writeText(ev.target.dataset.copy);
+              this.toast('success', 'Copied ' + ev.target.dataset.copy);
+              ev.stopPropagation();
+              return;
+            }
+            // Find the AG Grid row the click happened in
+            const rowEl = ev.target.closest('.ag-row');
+            if (!rowEl || this.drawerOpen) return;
+            const rowIndex = parseInt(rowEl.getAttribute('row-index'), 10);
+            if (Number.isNaN(rowIndex)) return;
+            // Sorted rows may differ from this.rows; pull from the grid API when possible
+            const api = _g?.api ?? _g;
+            let rowData = null;
+            if (api?.getDisplayedRowAtIndex) {
+              rowData = api.getDisplayedRowAtIndex(rowIndex)?.data;
+            }
+            rowData ??= this.rows[rowIndex];
+            if (rowData) this.openEntity(rowData);
+          });
+        }
+
+        // Responsive columns — hide/show low-value columns when crossing the
+        // 768px breakpoint (rotating a tablet, resizing desktop, etc.)
+        if (!this.__aimMediaBound) {
+          this.__aimMediaBound = true;
+          const mq = window.matchMedia('(max-width: 767px), (max-height: 500px)');
+          const toggle = () => {
+            const api = _g?.api ?? _g;
+            if (!api?.setColumnsVisible) return;
+            const narrow = mq.matches;
+            api.setColumnsVisible(
+              ['transactionCount','activityLocation','firstTxDate','lastTxDate','linkId'],
+              !narrow
+            );
+          };
+          mq.addEventListener?.('change', toggle);
+        }
       },
 
       renderCharts(risk, states) {
+        const cs = getComputedStyle(document.documentElement);
+        const chartBar = cs.getPropertyValue('--chart-bar').trim();
+        const chartGrid = cs.getPropertyValue('--chart-grid').trim();
+        const chartText = cs.getPropertyValue('--chart-text').trim();
+        const chartStroke = cs.getPropertyValue('--chart-stroke').trim();
+        const themeMode = this.isDark ? 'dark' : 'light';
+
         const riskColors = { TOP:'#ef4444', HIGH:'#f97316', MODERATE:'#eab308', LOW:'#22c55e' };
         const riskOpts = {
-          chart: { type:'donut', height:260, background:'transparent', toolbar:{show:false} },
+          chart: { type:'donut', height:280, background:'transparent', toolbar:{show:false} },
           series: risk.map(r => r.count),
           labels: risk.map(r => r.riskLevel),
           colors: risk.map(r => riskColors[r.riskLevel] || '#6366f1'),
-          legend: { labels: { colors: '#94a3b8' }, position: 'bottom' },
-          theme: { mode: 'dark' },
-          plotOptions: { pie: { donut: { size:'68%' } } },
-          dataLabels: { style: { colors: ['#fff'] } },
-          stroke: { colors: ['#0f172a'] },
+          legend: { labels: { colors: chartText }, position: 'bottom', fontSize:'13px', markers:{width:10,height:10,radius:2} },
+          theme: { mode: themeMode },
+          plotOptions: { pie: { donut: { size:'65%', labels:{ show:true, name:{fontSize:'13px',color:chartText}, value:{fontSize:'18px',fontWeight:600,color:chartText}, total:{show:true,label:'Total',fontSize:'12px',color:chartText,formatter:function(w){return w.globals.seriesTotals.reduce((a,b)=>a+b,0)}} } } } },
+          dataLabels: { enabled:false },
+          stroke: { colors: [chartStroke], width:2 },
+          tooltip: { y: { formatter: function(val,opts){ var total=opts.globals.seriesTotals.reduce((a,b)=>a+b,0); return val+' ('+(total?((val/total)*100).toFixed(1):0)+'%)'; } } },
         };
         const top = states.slice(0, 10);
         const stateOpts = {
           chart: { type:'bar', height:260, background:'transparent', toolbar:{show:false} },
           series: [{ name: 'Filings', data: top.map(s => s.count) }],
-          xaxis: { categories: top.map(s => s.state), labels: { style: { colors: '#64748b' } } },
-          yaxis: { labels: { style: { colors: '#64748b' } } },
-          colors: ['#60a5fa'],
-          theme: { mode: 'dark' },
-          grid: { borderColor: '#1e293b' },
+          xaxis: { categories: top.map(s => s.state), labels: { style: { colors: chartText } } },
+          yaxis: { labels: { style: { colors: chartText } } },
+          colors: [chartBar],
+          theme: { mode: themeMode },
+          grid: { borderColor: chartGrid },
           plotOptions: { bar: { borderRadius: 3, horizontal: false } },
           dataLabels: { enabled: false },
         };
@@ -567,7 +890,8 @@
         this.tab = 'overview';
         this.entityFilings = [];
         this.selected = { linkId: row.linkId, subjectName: row.subjectName,
-                          riskLevel: row.riskLevel, transactionCount: row.transactionCount,
+                          riskLevel: row.riskLevel, riskScore: row.riskScore,
+                          transactionCount: row.transactionCount,
                           totalAmount: row.totalAmount };
         const list = await fetch('/api/bsa-reports/subjects/' + encodeURIComponent(row.linkId))
           .then(x => x.ok ? x.json() : []);
@@ -577,6 +901,7 @@
           const r = list[0];
           this.selected = { ...this.selected,
             formType: r.formType, filingDate: r.filingDate, transactionDate: r.transactionDate,
+            residenceState: row.residenceState || row.activityLocation,
             subjectState: r.subjectState, subjectDob: r.subjectDob, subjectEinSsn: r.subjectEinSsn,
             amountTotal: r.amountTotal, suspiciousActivityType: r.suspiciousActivityType,
             transactionType: r.transactionType, institutionType: r.institutionType,
@@ -589,6 +914,12 @@
       },
 
       renderSubjectChart(filings) {
+        const cs = getComputedStyle(document.documentElement);
+        const chartBar = cs.getPropertyValue('--chart-bar').trim();
+        const chartGrid = cs.getPropertyValue('--chart-grid').trim();
+        const chartText = cs.getPropertyValue('--chart-text').trim();
+        const themeMode = this.isDark ? 'dark' : 'light';
+
         const pts = filings
           .filter(t => t.filingDate && t.amountTotal != null)
           .map(t => ({ x: new Date(t.filingDate).getTime(), y: Number(t.amountTotal) }))
@@ -596,12 +927,12 @@
         const opts = {
           chart: { type:'line', height:160, background:'transparent', toolbar:{show:false} },
           series: [{ name: 'Amount', data: pts }],
-          xaxis: { type: 'datetime', labels: { style: { colors: '#64748b' } } },
-          yaxis: { labels: { style: { colors: '#64748b' }, formatter: v => '$' + Number(v).toLocaleString() } },
+          xaxis: { type: 'datetime', labels: { style: { colors: chartText } } },
+          yaxis: { labels: { style: { colors: chartText }, formatter: v => '$' + Number(v).toLocaleString() } },
           stroke: { curve: 'smooth', width: 2 },
-          colors: ['#60a5fa'],
-          theme: { mode: 'dark' },
-          grid: { borderColor: '#1e293b' },
+          colors: [chartBar],
+          theme: { mode: themeMode },
+          grid: { borderColor: chartGrid },
           dataLabels: { enabled: false },
         };
         this.$nextTick(() => {
@@ -611,6 +942,150 @@
       },
 
       closeDrawer() { this.drawerOpen = false; this.selected = null; this.entityFilings = []; },
+
+      async loadAlerts() {
+        try {
+          const r = await fetch('/api/alerts');
+          if (r.ok) this.alerts = await r.json();
+        } catch { /* silent — alerts are non-critical */ }
+      },
+
+      async loadNetwork() {
+        try {
+          const r = await fetch('/api/network');
+          if (r.ok) {
+            this.network = await r.json();
+            // If the card is already expanded (persisted), render after data arrives
+            if (this.networkExpanded) this.$nextTick(() => this.renderNetwork());
+          }
+        } catch { /* silent */ }
+      },
+
+      toggleNetwork() {
+        this.networkExpanded = !this.networkExpanded;
+        localStorage.setItem('aim-network-expanded', this.networkExpanded ? '1' : '0');
+        if (this.networkExpanded) this.$nextTick(() => this.renderNetwork());
+      },
+
+      renderNetwork() {
+        const container = document.getElementById('chart-network');
+        if (!container || !this.network?.nodes?.length) return;
+
+        const cs = getComputedStyle(document.documentElement);
+        const colorTop  = cs.getPropertyValue('--risk-top-text').trim()  || '#ef4444';
+        const colorHigh = cs.getPropertyValue('--risk-high-text').trim() || '#f97316';
+        const borderSurface = cs.getPropertyValue('--bg-surface').trim();
+        const textMuted = cs.getPropertyValue('--text-muted').trim();
+        const textPrimary = cs.getPropertyValue('--text-primary').trim();
+
+        const width = container.clientWidth || 800;
+        // Scale height with viewport: ~260px on phone, up to 420px on desktop
+        const height = Math.min(420, Math.max(260, Math.round(window.innerHeight * 0.45)));
+
+        // Clone nodes/edges so D3 can mutate (adds x/y/vx/vy)
+        const nodes = this.network.nodes.map(n => ({ ...n }));
+        const edges = this.network.edges.map(e => ({ source: e.source, target: e.target, kind: e.kind, label: e.label }));
+
+        // Clear previous render
+        d3.select(container).selectAll('*').remove();
+
+        const svg = d3.select(container).append('svg')
+          .attr('viewBox', `0 0 ${width} ${height}`)
+          .attr('width', '100%').attr('height', height);
+
+        // Arrow/line strokes
+        const linkSel = svg.append('g').attr('class', 'links')
+          .selectAll('line').data(edges).enter().append('line')
+          .attr('class', d => 'link link-' + d.kind)
+          .append('title').text(d => d.label)
+          .select(function() { return this.parentNode; });
+
+        // Node groups (circle + label)
+        const nodeSel = svg.append('g').attr('class', 'nodes')
+          .selectAll('g').data(nodes).enter().append('g')
+          .attr('class', 'node-group')
+          .style('cursor', 'pointer')
+          .on('click', (_, d) => this.openAlertEntity(d.linkId));
+
+        nodeSel.append('circle')
+          .attr('class', 'node')
+          .attr('r', d => d.risk === 'TOP' ? 12 : 9)
+          .attr('fill', d => d.risk === 'TOP' ? colorTop : colorHigh)
+          .attr('stroke', borderSurface)
+          .attr('stroke-width', 2)
+          .append('title').text(d => `${d.subject} — ${d.risk} (${d.transactionCount} tx, $${Math.round(d.totalAmount).toLocaleString()})`);
+
+        nodeSel.append('text')
+          .attr('class', 'node-label')
+          .attr('dx', d => (d.risk === 'TOP' ? 14 : 11))
+          .attr('dy', 4)
+          .attr('fill', textPrimary)
+          .text(d => {
+            const s = d.subject || '—';
+            return s.length > 18 ? s.substring(0, 17) + '…' : s;
+          });
+
+        // Force config tuned for mostly-disconnected graphs: weak repulsion +
+        // positional anchors keep nodes within the viewport even when an entity
+        // has no shared-DOB/institution neighbors. Clamp via bounding box in tick.
+        const pad = 40;
+        const minX = pad, maxX = width - pad;
+        const minY = pad, maxY = height - pad;
+        const sim = d3.forceSimulation(nodes)
+          .force('link', d3.forceLink(edges).id(d => d.linkId).distance(90).strength(0.7))
+          .force('charge', d3.forceManyBody().strength(-120))
+          .force('x', d3.forceX(width / 2).strength(0.08))
+          .force('y', d3.forceY(height / 2).strength(0.12))
+          .force('collide', d3.forceCollide().radius(d => (d.risk === 'TOP' ? 70 : 60)))
+          .on('tick', () => {
+            // Keep nodes inside the svg viewport
+            nodes.forEach(n => {
+              n.x = Math.max(minX, Math.min(maxX, n.x));
+              n.y = Math.max(minY, Math.min(maxY, n.y));
+            });
+            linkSel
+              .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+              .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+            nodeSel.attr('transform', d => `translate(${d.x},${d.y})`);
+          });
+
+        // Drag to reposition
+        nodeSel.call(d3.drag()
+          .on('start', (event, d) => { if (!event.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+          .on('drag',  (event, d) => { d.fx = event.x; d.fy = event.y; })
+          .on('end',   (event, d) => { if (!event.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }));
+
+        this._networkRendered = true;
+      },
+
+      dismissAlert(id) {
+        if (!this.dismissedAlertIds.includes(id)) {
+          this.dismissedAlertIds.push(id);
+          localStorage.setItem('aim-dismissed-alerts', JSON.stringify(this.dismissedAlertIds));
+        }
+      },
+
+      async openAlertEntity(linkId) {
+        this.alertsOpen = false;
+        // Prefer the already-loaded row (saves a fetch)
+        const row = this.rows.find(r => r.linkId === linkId);
+        if (row) {
+          this.openEntity(row);
+        } else {
+          // Row not in current filtered view — fabricate a minimal row so the modal
+          // can still fetch filings for this linkId via /api/bsa-reports/subjects/{linkId}
+          const alert = this.alerts.find(a => a.linkId === linkId);
+          if (!alert) { this.toast('error', 'Entity details unavailable'); return; }
+          this.openEntity({
+            linkId: alert.linkId,
+            subjectName: alert.subject,
+            riskLevel: alert.severity,
+            riskScore: alert.severity === 'TOP' ? 4 : 3,
+            transactionCount: alert.transactionCount,
+            totalAmount: alert.totalAmount
+          });
+        }
+      },
 
       copyLinkId() {
         if (!this.selected?.linkId || this.selected.linkId === 'unlinked') return;

@@ -3,91 +3,184 @@
     Layout = null;
     var isAdmin = User.IsInRole("Admin");
     var isAnalyst = User.IsInRole("Analyst") || isAdmin;
+    var displayName = User.Identity?.Name ?? "Guest";
     if (!isAnalyst) { Response.Redirect("/"); return; }
 }
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en" x-data="{ isDark: localStorage.getItem('aim-theme') === 'dark' || (!localStorage.getItem('aim-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches), sidebarCollapsed: localStorage.getItem('aim-sidebar') === 'collapsed', mobileOpen: false }" x-init="$watch('isDark', v => { if(v) document.documentElement.classList.add('dark'); else document.documentElement.classList.remove('dark'); localStorage.setItem('aim-theme', v ? 'dark' : 'light'); }); if(isDark) document.documentElement.classList.add('dark'); $watch('sidebarCollapsed', v => { document.getElementById('main').classList.toggle('sidebar-collapsed', v); localStorage.setItem('aim-sidebar', v ? 'collapsed' : 'expanded'); }); if(sidebarCollapsed) document.getElementById('main').classList.add('sidebar-collapsed');" :class="{ dark: isDark }">
 <head>
   <meta charset="UTF-8" />
   <title>AIM — Filing Queue</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/theme.css">
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: { extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] } } }
+    }
+  </script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.9/dist/cdn.min.js"></script>
   <style>
-    body { background:#070b16; color:#e2e8f0; font-family: ui-sans-serif, system-ui, sans-serif; }
-    .sb { display:inline-flex; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
-    .sb-Draft{background:#1e293b;color:#94a3b8} .sb-PendingReview{background:rgba(234,179,8,.15);color:#fbbf24}
-    .sb-Approved{background:rgba(14,165,233,.15);color:#38bdf8} .sb-Submitted{background:rgba(99,102,241,.15);color:#a5b4fc}
-    .sb-Acknowledged{background:rgba(16,185,129,.15);color:#34d399} .sb-Rejected{background:rgba(239,68,68,.15);color:#f87171}
+    body { background: var(--bg-page); color: var(--text-primary); font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; }
+    .filing-surface { background: var(--bg-surface); border: 1px solid var(--border); }
+    .filing-elevated { background: var(--bg-elevated); border: 1px solid var(--border); }
+    .filing-input { background: var(--bg-input); border: 1px solid var(--border-input); color: var(--text-primary); }
+    .filing-input:focus { border-color: var(--border-focus); outline: none; }
+    .filing-thead { background: var(--bg-elevated); color: var(--text-muted); }
+    .filing-row { border-top: 1px solid var(--border); }
+    .filing-row:hover { background: var(--bg-hover); }
+    .text-secondary { color: var(--text-secondary); }
+    .text-muted { color: var(--text-muted); }
+    .btn-accent { background: var(--accent); color: #fff; }
+    .btn-accent:hover { background: var(--accent-hover); }
+    .btn-secondary { background: var(--bg-input); color: var(--text-primary); }
+    .link-accent { color: var(--accent-light); }
+    .link-accent:hover { text-decoration: underline; }
   </style>
 </head>
-<body x-data="filingQueue()" x-init="init()">
-  <div class="max-w-6xl mx-auto p-6">
-    <div class="flex items-center justify-between mb-5">
-      <div>
-        <h1 class="text-xl font-semibold">Filing Queue</h1>
-        <p class="text-xs text-slate-500">Drafts, reviews, and submissions</p>
+<body class="antialiased" style="background:var(--bg-page);color:var(--text-primary)">
+
+  <!-- Mobile hamburger trigger -->
+  <button id="mobile-trigger" @@click="mobileOpen = !mobileOpen"
+    class="fixed top-3 left-3 z-50 p-2 rounded-lg transition-opacity"
+    :class="{ 'opacity-0 pointer-events-none': mobileOpen }"
+    style="background:var(--bg-sidebar);color:var(--text-on-dark)"
+    aria-label="Open sidebar navigation">
+    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+  </button>
+
+  <!-- Mobile backdrop -->
+  <div id="mobile-backdrop" :class="{'open': mobileOpen}" @@click="mobileOpen = false"></div>
+
+  <aside id="sidebar" :class="{'collapsed': sidebarCollapsed, 'mobile-open': mobileOpen}">
+    <!-- Logo + collapse toggle -->
+    <div class="flex items-center justify-between px-3 pt-4 pb-3 border-b" style="border-color:var(--border)">
+      <div class="flex items-center gap-2 min-w-0">
+        <img src="/images/AimLogo.svg" alt="AIM" class="w-7 h-7 flex-shrink-0" />
+        <span class="sidebar-label text-sm font-bold" style="color:var(--text-on-dark)">AIM</span>
+      </div>
+      <button @@click="mobileOpen ? (mobileOpen = false) : (sidebarCollapsed = !sidebarCollapsed, localStorage.setItem('aim-sidebar', sidebarCollapsed ? 'collapsed' : 'expanded'))" class="sidebar-collapse-chevron p-1 rounded hover:bg-white/10 flex-shrink-0" style="color:var(--text-muted)" :title="mobileOpen ? 'Close sidebar' : 'Toggle sidebar'">
+        <svg :style="sidebarCollapsed ? 'transform:rotate(180deg)' : ''" style="transition:transform .25s" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 16 16"><path d="M10 3L5 8l5 5"/></svg>
+      </button>
+    </div>
+
+    <!-- Page navigation -->
+    <div class="p-2 border-b" style="border-color:var(--border)">
+      <a href="/" class="nav-item mb-1" title="Dashboard">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 16 16" class="flex-shrink-0"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+        <span class="nav-link-text">Dashboard</span>
+      </a>
+      @if (isAnalyst)
+      {
+      <a href="/Filing" class="nav-item active mb-1" title="Filing Queue">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 16 16" class="flex-shrink-0"><path d="M2 3h12v10H2z"/><path d="M2 6h12"/><path d="M6 6v7"/></svg>
+        <span class="nav-link-text">Filing Queue</span>
+      </a>
+      }
+      @if (isAdmin)
+      {
+      <a href="/Import" class="nav-item mb-1" title="Import">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 16 16" class="flex-shrink-0"><path d="M8 2v8M5 7l3 3 3-3"/><path d="M2 11v2h12v-2"/></svg>
+        <span class="nav-link-text">Import</span>
+      </a>
+      }
+    </div>
+
+    <!-- Bottom: user info + theme toggle -->
+    <div class="flex-1"></div>
+    <div class="px-3 py-3 border-t sidebar-bottom" style="border-color:var(--border)">
+      <button @@click="isDark = !isDark; localStorage.setItem('aim-theme', isDark ? 'dark' : 'light')" class="nav-item w-full mb-2" title="Toggle theme">
+        <template x-if="isDark"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 16 16" class="flex-shrink-0"><circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41"/></svg></template>
+        <template x-if="!isDark"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 16 16" class="flex-shrink-0"><path d="M13.5 8.5a5.5 5.5 0 1 1-7-7 7 7 0 0 0 7 7z"/></svg></template>
+        <span class="nav-link-text" x-text="isDark ? 'Light Mode' : 'Dark Mode'"></span>
+      </button>
+      <div class="flex items-center gap-2 px-3 py-1">
+        <div class="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0" style="background:var(--accent);color:#fff" x-text="('@displayName')[0]?.toUpperCase()"></div>
+        <div class="nav-link-text min-w-0">
+          <div class="text-xs truncate" style="color:var(--text-on-dark)" x-text="'@displayName'"></div>
+          <div class="text-[10px]" style="color:var(--text-muted)">@(isAdmin ? "Admin" : (isAnalyst ? "Analyst" : "Viewer"))</div>
+        </div>
+      </div>
+      <a href="/Identity/Account/Logout" class="nav-item mt-1" title="Sign out">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 16 16" class="flex-shrink-0"><path d="M6 14H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h3M11 11l3-3-3-3M6 8h8"/></svg>
+        <span class="nav-link-text">Sign out</span>
+      </a>
+    </div>
+  </aside>
+
+  <main id="main" class="p-4 sm:p-6" :class="{'sidebar-collapsed': sidebarCollapsed}">
+  <div x-data="filingQueue()" x-init="init()">
+    <div class="page-header-row flex flex-wrap items-center justify-between gap-3 mb-5">
+      <div class="min-w-0">
+        <h1 class="text-lg sm:text-xl font-semibold">Filing Queue</h1>
+        <p class="text-xs text-muted">Drafts, reviews, and submissions</p>
       </div>
       <div class="flex items-center gap-2">
-        <a href="/" class="text-blue-400 text-xs hover:underline">← Dashboard</a>
         <button @@click="showNew = !showNew"
-          class="bg-blue-600 hover:bg-blue-500 rounded-md px-3 py-1.5 text-xs text-white font-medium">+ New Filing</button>
+          class="btn-accent rounded-md px-3 py-1.5 text-xs font-medium">+ New Filing</button>
       </div>
     </div>
 
-    <div class="flex gap-2 mb-4">
+    <div class="flex flex-wrap gap-2 mb-4">
       <template x-for="s in statuses" :key="s">
         <button @@click="status = s; load()" class="px-3 py-1.5 text-xs rounded-md"
-          :class="status === s ? 'bg-blue-600 text-white' : 'bg-slate-900 text-slate-300 border border-slate-800'"
+          :style="status === s ? 'background: var(--accent); color: #fff;' : 'background: var(--bg-surface); color: var(--text-secondary); border: 1px solid var(--border);'"
           x-text="s"></button>
       </template>
     </div>
 
-    <div x-show="showNew" class="bg-slate-900 border border-slate-800 rounded-lg p-4 mb-5">
+    <div x-show="showNew" class="filing-surface rounded-lg p-4 mb-5">
       <div class="text-sm font-medium mb-3">New Draft Filing</div>
-      <div class="grid grid-cols-2 gap-3 text-xs">
-        <label class="flex flex-col">Form Type <input x-model="draft.formType" class="bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mt-1"></label>
-        <label class="flex flex-col">BSA ID <input x-model="draft.bsaId" class="bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mt-1"></label>
-        <label class="flex flex-col">Subject Name <input x-model="draft.subjectName" class="bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mt-1"></label>
-        <label class="flex flex-col">Subject State <input x-model="draft.subjectState" class="bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mt-1" maxlength="2"></label>
-        <label class="flex flex-col">Subject DOB <input x-model="draft.subjectDob" class="bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mt-1" placeholder="YYYY-MM-DD"></label>
-        <label class="flex flex-col">EIN/SSN <input x-model="draft.subjectEinSsn" class="bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mt-1"></label>
-        <label class="flex flex-col">Amount <input type="number" step="0.01" x-model.number="draft.amountTotal" class="bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mt-1"></label>
-        <label class="flex flex-col">Suspicious Activity Type <input x-model="draft.suspiciousActivityType" class="bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mt-1"></label>
-        <label class="flex flex-col">Transaction Type <input x-model="draft.transactionType" class="bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mt-1"></label>
-        <label class="flex flex-col">Transaction Date <input type="date" x-model="draft.transactionDate" class="bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mt-1"></label>
-        <label class="flex flex-col">Institution Type <input x-model="draft.institutionType" class="bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mt-1"></label>
-        <label class="flex flex-col">Institution State <input x-model="draft.institutionState" class="bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mt-1" maxlength="2"></label>
-        <label class="flex flex-col col-span-2">Regulator <input x-model="draft.regulator" class="bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mt-1"></label>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+        <label class="flex flex-col">Form Type <input x-model="draft.formType" class="filing-input rounded px-2 py-1.5 mt-1"></label>
+        <label class="flex flex-col">BSA ID <input x-model="draft.bsaId" class="filing-input rounded px-2 py-1.5 mt-1"></label>
+        <label class="flex flex-col">Subject Name <input x-model="draft.subjectName" class="filing-input rounded px-2 py-1.5 mt-1"></label>
+        <label class="flex flex-col">Subject State <input x-model="draft.subjectState" class="filing-input rounded px-2 py-1.5 mt-1" maxlength="2"></label>
+        <label class="flex flex-col">Subject DOB <input x-model="draft.subjectDob" class="filing-input rounded px-2 py-1.5 mt-1" placeholder="YYYY-MM-DD"></label>
+        <label class="flex flex-col">EIN/SSN <input x-model="draft.subjectEinSsn" class="filing-input rounded px-2 py-1.5 mt-1"></label>
+        <label class="flex flex-col">Amount <input type="number" step="0.01" x-model.number="draft.amountTotal" class="filing-input rounded px-2 py-1.5 mt-1"></label>
+        <label class="flex flex-col">Suspicious Activity Type <input x-model="draft.suspiciousActivityType" class="filing-input rounded px-2 py-1.5 mt-1"></label>
+        <label class="flex flex-col">Transaction Type <input x-model="draft.transactionType" class="filing-input rounded px-2 py-1.5 mt-1"></label>
+        <label class="flex flex-col">Transaction Date <input type="date" x-model="draft.transactionDate" class="filing-input rounded px-2 py-1.5 mt-1"></label>
+        <label class="flex flex-col">Institution Type <input x-model="draft.institutionType" class="filing-input rounded px-2 py-1.5 mt-1"></label>
+        <label class="flex flex-col">Institution State <input x-model="draft.institutionState" class="filing-input rounded px-2 py-1.5 mt-1" maxlength="2"></label>
+        <label class="flex flex-col col-span-2">Regulator <input x-model="draft.regulator" class="filing-input rounded px-2 py-1.5 mt-1"></label>
       </div>
       <div class="mt-3 flex gap-2">
-        <button @@click="createDraft()" class="bg-blue-600 hover:bg-blue-500 rounded-md px-3 py-1.5 text-xs text-white">Save Draft</button>
-        <button @@click="showNew=false" class="bg-slate-800 rounded-md px-3 py-1.5 text-xs">Cancel</button>
-        <span class="text-xs text-red-400" x-text="formError"></span>
+        <button @@click="createDraft()" class="btn-accent rounded-md px-3 py-1.5 text-xs">Save Draft</button>
+        <button @@click="showNew=false" class="btn-secondary rounded-md px-3 py-1.5 text-xs">Cancel</button>
+        <span class="text-xs" style="color: var(--risk-top-text);" x-text="formError"></span>
       </div>
     </div>
 
-    <div class="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
-      <table class="w-full text-xs">
-        <thead class="bg-slate-950 text-slate-500 uppercase text-[10px] tracking-widest">
+    <div class="filing-surface rounded-lg overflow-hidden">
+      <div class="overflow-x-auto">
+      <table class="w-full text-xs" style="min-width:640px">
+        <thead class="filing-thead uppercase text-[10px] tracking-widest">
           <tr><th class="text-left p-3">BSA ID</th><th class="text-left p-3">Subject</th><th class="text-left p-3">Form</th><th class="text-right p-3">Amount</th><th class="text-left p-3">Risk</th><th class="text-left p-3">Status</th><th class="text-left p-3">Updated</th></tr>
         </thead>
         <tbody>
           <template x-for="r in rows" :key="r.id">
-            <tr class="border-t border-slate-800 hover:bg-slate-800/30 cursor-pointer" @@click="openDetails(r)">
+            <tr class="filing-row cursor-pointer" @@click="openDetails(r)">
               <td class="p-3" x-text="r.bsaId"></td>
               <td class="p-3" x-text="r.subjectName || '—'"></td>
               <td class="p-3" x-text="r.formType"></td>
               <td class="p-3 text-right" x-text="r.amountTotal != null ? '$'+Number(r.amountTotal).toLocaleString() : '—'"></td>
               <td class="p-3" x-text="r.riskLevel"></td>
               <td class="p-3"><span class="sb" :class="'sb-'+r.status" x-text="r.status"></span></td>
-              <td class="p-3 text-slate-500" x-text="new Date(r.updatedAt).toISOString().slice(0,10)"></td>
+              <td class="p-3 text-muted" x-text="new Date(r.updatedAt).toISOString().slice(0,10)"></td>
             </tr>
           </template>
-          <tr x-show="!rows.length"><td colspan="7" class="p-6 text-center text-slate-600">No filings in this status.</td></tr>
+          <tr x-show="!rows.length"><td colspan="7" class="p-6 text-center text-muted">No filings in this status.</td></tr>
         </tbody>
       </table>
+      </div>
     </div>
   </div>
+  </main>
 
 <script>
   function filingQueue() {

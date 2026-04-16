@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Shield outline -->
+  <path d="M16 1.5L4 6.5v9c0 7.5 5.1 14.5 12 16 6.9-1.5 12-8.5 12-16v-9L16 1.5z"
+        stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round" fill="none"/>
+  <!-- Pulse/heartbeat line -->
+  <polyline points="6,16 11,16 13,11 15,20 17,8 19,19 21,13 23,16 27,16"
+            stroke="#ffffff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>

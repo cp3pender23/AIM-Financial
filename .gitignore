@@ -5,3 +5,6 @@ obj/
 appsettings.Development.json
 secrets/*.env
 !secrets/*.example
+
+# Tool output — Chrome DevTools MCP captures console logs and page snapshots here
+.playwright-mcp/
