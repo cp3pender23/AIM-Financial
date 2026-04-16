@@ -153,6 +153,9 @@
                   <button class="btn-secondary" @@click="toggleActive(u)" :disabled="u.id==='@Model.CurrentUserId'"
                           x-text="u.isActive ? 'Disable' : 'Enable'"></button>
                   <button class="btn-secondary btn-danger" @@click="resetPassword(u)" :disabled="u.id==='@Model.CurrentUserId'">Reset pwd</button>
+                  <template x-if="callerIsSuperAdmin && u.id !== '@Model.CurrentUserId'">
+                    <button class="btn-secondary btn-danger" @@click="deleteUser(u)" style="border-color:rgba(239,68,68,.6)">Delete</button>
+                  </template>
                 </td>
               </tr>
             </template>
@@ -341,6 +344,23 @@ function adminUsers() {
         await this.loadUsers();
       } finally {
         this.inviting = false;
+      }
+    },
+
+    async deleteUser(u) {
+      if (!confirm(`Permanently delete ${u.email}? This cannot be undone.`)) return;
+      if (!confirm(`Are you absolutely sure? This will remove all data for ${u.email}.`)) return;
+      try {
+        const res = await fetch(`/api/admin/users/${u.id}`, { method: 'DELETE' });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          this.toast(body.error || 'Delete failed.', 'error');
+          return;
+        }
+        this.rows = this.rows.filter(r => r.id !== u.id);
+        this.toast(`${u.email} permanently deleted.`);
+      } catch (e) {
+        this.toast('Delete failed.', 'error');
       }
     },
 

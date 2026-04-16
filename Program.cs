@@ -478,6 +478,33 @@ api.MapPost("/admin/users/{id}/reset-password", async (string id, UserManager<Ai
     return Results.Ok(new { ok = true, tempPassword });
 }).RequireAuthorization(AimPolicies.CanManageUsers);
 
+api.MapDelete("/admin/users/{id}", async (string id, HttpContext ctx, UserManager<AimUser> userMgr, IAuditLogger audit) =>
+{
+    // Hard delete is SuperAdmin-only. Admins can soft-disable but not
+    // permanently remove a user row. This is intentionally destructive —
+    // the confirmation dialog on the frontend is the safety net.
+    if (!EffectiveRoles.IsRealSuperAdmin(ctx))
+        return Results.Forbid();
+
+    var user = await userMgr.FindByIdAsync(id);
+    if (user is null) return Results.NotFound();
+
+    // Prevent self-deletion — a SuperAdmin accidentally nuking their own
+    // account would be unrecoverable without direct DB access.
+    var callerId = ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    if (user.Id == callerId)
+        return Results.BadRequest(new { error = "You cannot delete your own account" });
+
+    audit.Log(AuditAction.ImportBatch, "AimUser", user.Id, null,
+        new { action = "hard-delete", email = user.Email, role = (await userMgr.GetRolesAsync(user)).FirstOrDefault() });
+
+    var result = await userMgr.DeleteAsync(user);
+    if (!result.Succeeded)
+        return Results.BadRequest(new { errors = result.Errors.Select(e => e.Description).ToArray() });
+
+    return Results.Ok(new { ok = true });
+}).RequireAuthorization(AimPolicies.CanManageUsers);
+
 app.MapRazorPages();
 app.MapControllers();
 
