@@ -353,11 +353,18 @@ function adminUsers() {
       }
     },
 
+    // Server returns DateTime without Z suffix (Npgsql legacy timestamp
+    // behavior strips timezone info). Append Z so JS knows it's UTC and
+    // converts to the user's real local timezone correctly.
+    toUtcDate(iso) {
+      if (!iso) return null;
+      const s = iso.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(iso) ? iso : iso + 'Z';
+      const d = new Date(s);
+      return isNaN(d.getTime()) || d.getFullYear() < 1900 ? null : d;
+    },
     fmtDate(iso, includeTime = false) {
-      if (!iso) return '—';
-      const d = new Date(iso);
-      if (isNaN(d.getTime())) return '—';
-      if (d.getFullYear() < 1900) return '—';
+      const d = this.toUtcDate(iso);
+      if (!d) return '—';
       const dateStr = d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
       if (!includeTime) return dateStr;
       const timeStr = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' });

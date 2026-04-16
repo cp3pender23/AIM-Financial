@@ -1195,7 +1195,11 @@
       },
       fmtDate(d) {
         if (!d) return '—';
-        const t = new Date(d);
+        // Server returns DateTime without Z suffix (Npgsql legacy timestamp
+        // behavior strips tz info). Append Z so JS treats it as UTC and
+        // converts to the user's real local timezone.
+        const s = typeof d === 'string' && !d.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(d) ? d + 'Z' : d;
+        const t = new Date(s);
         if (isNaN(t)) return '—';
         return t.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
       },
