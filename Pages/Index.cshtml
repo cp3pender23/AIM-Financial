@@ -1,9 +1,19 @@
 @page
+@using AIM.Web.Services
+@using AIM.Web.Models
 @{
     Layout = null;
     var displayName = User.Identity?.Name ?? "Guest";
-    var isAdmin = User.IsInRole("Admin");
-    var isAnalyst = User.IsInRole("Analyst") || isAdmin;
+    // Use effective-role snapshot: all gating respects the SuperAdmin view-as
+    // cookie so the switcher genuinely previews lower roles.
+    var e = EffectiveRoles.Compute(HttpContext);
+    var isSuperAdmin = e.IsSuperAdmin;
+    var isAdmin = e.IsAdmin;
+    var isAnalyst = e.IsAnalyst;
+    var viewAsOverride = e.ViewAsOverride;
+    var primaryRoleLabel = isSuperAdmin
+        ? (viewAsOverride ?? AimRoles.SuperAdmin)
+        : (isAdmin ? AimRoles.Admin : (isAnalyst ? AimRoles.Analyst : AimRoles.Viewer));
 }
 <!DOCTYPE html>
 <html lang="en" :class="{ dark: isDark }">
@@ -193,13 +203,16 @@
         <template x-if="!isDark"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 16 16" class="flex-shrink-0"><path d="M13.5 8.5a5.5 5.5 0 1 1-7-7 7 7 0 0 0 7 7z"/></svg></template>
         <span class="nav-link-text" x-text="isDark ? 'Light Mode' : 'Dark Mode'"></span>
       </button>
-      <div class="flex items-center gap-2 px-3 py-1">
-        <div class="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0" style="background:var(--accent);color:#fff" x-text="('@displayName')[0]?.toUpperCase()"></div>
+      <a href="/Profile" class="flex items-center gap-2 px-3 py-1 rounded-md profile-link" title="Edit your profile">
+        <div class="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+             style="background:@(isSuperAdmin ? "#d97706" : "var(--accent)");color:#fff" x-text="('@displayName')[0]?.toUpperCase()"></div>
         <div class="nav-link-text min-w-0">
           <div class="text-xs truncate" style="color:var(--text-on-dark)" x-text="'@displayName'"></div>
-          <div class="text-[10px]" style="color:var(--text-muted)">@(isAdmin ? "Admin" : (isAnalyst ? "Analyst" : "Viewer"))</div>
+          <div class="text-[10px]" style="color:var(--text-muted)">
+            @primaryRoleLabel@(isSuperAdmin && viewAsOverride != null ? " · view-as" : "")
+          </div>
         </div>
-      </div>
+      </a>
       <a href="/Identity/Account/Logout" class="nav-item mt-1" title="Sign out">
         <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 16 16" class="flex-shrink-0"><path d="M6 14H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h3M11 11l3-3-3-3M6 8h8"/></svg>
         <span class="nav-link-text">Sign out</span>
@@ -227,13 +240,48 @@
         {
           <a href="/Filing" class="rounded-md px-3 py-1.5 text-xs text-white font-medium" style="background:var(--accent)">Filing Queue</a>
         }
-        @if (isAdmin)
+        @if (isAnalyst)
         {
           <a href="/Import" class="rounded-md px-3 py-1.5 text-xs"
             style="background:var(--bg-surface);border:1px solid var(--border);color:var(--text-secondary)">Bulk Import</a>
         }
+        @if (isAdmin)
+        {
+          <a href="/Admin/Users" class="relative rounded-md px-3 py-1.5 text-xs flex items-center gap-1.5"
+             style="background:var(--bg-surface);border:1px solid var(--border);color:var(--text-secondary)"
+             title="Manage users">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span>Manage Users</span>
+            <span x-show="newUserCount > 0" class="alert-badge" x-text="newUserCount"></span>
+          </a>
+        }
+        @if (isSuperAdmin)
+        {
+          <div class="relative" x-data="{ open: false }">
+            <button @@click="open = !open" class="rounded-md px-3 py-1.5 text-xs flex items-center gap-1.5 font-semibold"
+                    style="background:#d97706;color:#fff">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M2 20l3-10 7 5 7-5 3 10zM2 20h20"/></svg>
+              <span>View as: <span x-text="'@primaryRoleLabel'"></span></span>
+              <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div x-show="open" @@click.outside="open = false" x-transition class="absolute right-0 mt-1 rounded-md z-50" style="background:var(--bg-elevated);border:1px solid var(--border);min-width:200px;box-shadow:var(--shadow-md)">
+              <button @@click="setViewAs(null); open=false" class="dropdown-item"><span>SuperAdmin</span><span class="dropdown-hint">Your real role</span></button>
+              <button @@click="setViewAs('Admin'); open=false" class="dropdown-item"><span>Admin</span><span class="dropdown-hint">Full app + user mgmt</span></button>
+              <button @@click="setViewAs('Analyst'); open=false" class="dropdown-item"><span>Analyst</span><span class="dropdown-hint">Filings + bulk import</span></button>
+              <button @@click="setViewAs('Viewer'); open=false" class="dropdown-item"><span>Viewer</span><span class="dropdown-hint">Read-only dashboards</span></button>
+            </div>
+          </div>
+        }
       </div>
     </div>
+
+    @if (isSuperAdmin && viewAsOverride != null)
+    {
+      <div class="view-as-banner">
+        <span>You're viewing AIM as a <strong>@viewAsOverride</strong>. Your real role is SuperAdmin.</span>
+        <button @@click="setViewAs(null)" class="view-as-exit">Exit view-as</button>
+      </div>
+    }
 
     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
       <div class="rounded-lg p-4 flex flex-col justify-between min-h-[88px]" style="background:var(--bg-surface);border:1px solid var(--border)">
@@ -592,8 +640,12 @@
       networkExpanded: localStorage.getItem('aim-network-expanded') === '1',
       get unreadAlertCount() { return this.visibleAlerts.length; },
 
-      isAdmin: @(User.IsInRole("Admin") ? "true" : "false"),
-      isAnalyst: @(User.IsInRole("Analyst") || User.IsInRole("Admin") ? "true" : "false"),
+      // Role flags reflect EFFECTIVE role (SuperAdmin view-as respected).
+      isAdmin: @(isAdmin ? "true" : "false"),
+      isAnalyst: @(isAnalyst ? "true" : "false"),
+      isSuperAdmin: @(isSuperAdmin ? "true" : "false"),
+      viewAsOverride: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(viewAsOverride)),
+      newUserCount: 0,
 
       async init() {
         // Theme: sync class on init and watch for changes
@@ -625,6 +677,7 @@
         this.buildGrid();
         this.loadAlerts();       // fire-and-forget: alerts are non-critical
         this.loadNetwork();      // same — graph renders only when user expands the card
+        this.loadNewUserCount(); // admin badge on Manage Users (no-op for non-admins)
       },
 
       toggleTheme() {
@@ -942,6 +995,32 @@
       },
 
       closeDrawer() { this.drawerOpen = false; this.selected = null; this.entityFilings = []; },
+
+      // ─── SuperAdmin view-as ────────────────────────────────────────────
+      async setViewAs(role) {
+        const init = role === null
+          ? { method: 'DELETE' }
+          : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role }) };
+        try {
+          const res = await fetch('/api/view-as', init);
+          if (!res.ok) throw new Error('failed');
+          // Full reload so every server-rendered role conditional re-evaluates.
+          location.reload();
+        } catch (e) {
+          this.toast('Could not change view-as mode.', 'error');
+        }
+      },
+
+      // ─── Admin: "new users since I last looked" badge ──────────────────
+      async loadNewUserCount() {
+        if (!this.isAdmin) return;
+        try {
+          const r = await fetch('/api/admin/users/new-count');
+          if (!r.ok) return;
+          const body = await r.json();
+          this.newUserCount = body.count ?? 0;
+        } catch (e) { /* swallow — badge is a nice-to-have */ }
+      },
 
       async loadAlerts() {
         try {

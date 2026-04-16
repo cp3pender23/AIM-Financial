@@ -1,0 +1,255 @@
+@page
+@model AIM.Web.Pages.ProfileModel
+@{
+    Layout = null;
+    var fmt = (DateTime? dt) => dt.HasValue ? dt.Value.ToString("MMM d, yyyy h:mm tt") + " UTC" : "—";
+}
+<!DOCTYPE html>
+<html lang="en" x-data="profilePage()" x-init="init()" :class="{ dark: isDark }">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Profile — AIM</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { darkMode: 'class', theme: { extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] } } } }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/theme.css">
+
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.9/dist/cdn.min.js"></script>
+
+  <style>
+    .field-label { font-size:11px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:var(--text-muted); margin-bottom:6px; }
+    .field-input {
+      width:100%; padding:10px 12px; border-radius:8px; font-size:13px; font-family:inherit;
+      background:var(--bg-input); color:var(--text-primary); border:1px solid var(--border-input);
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .field-input:focus { outline:none; border-color:var(--border-focus); box-shadow:0 0 0 3px rgba(59,130,246,.15); }
+    .field-input[readonly] { background:var(--bg-surface); color:var(--text-muted); cursor:not-allowed; }
+    .btn-primary {
+      background:var(--accent); color:#fff; padding:9px 16px; border-radius:8px; font-size:13px;
+      font-weight:600; border:none; cursor:pointer; transition:background .15s;
+    }
+    .btn-primary:hover { background:var(--accent-hover); }
+    .btn-primary:disabled { opacity:.5; cursor:not-allowed; }
+    .btn-secondary {
+      background:var(--bg-surface); color:var(--text-secondary); padding:9px 16px; border-radius:8px;
+      font-size:13px; font-weight:500; border:1px solid var(--border); cursor:pointer;
+    }
+    .section-card {
+      background:var(--bg-surface); border:1px solid var(--border); border-radius:12px;
+      padding:24px; margin-bottom:16px;
+    }
+    .section-title { font-size:15px; font-weight:700; color:var(--text-primary); margin-bottom:4px; }
+    .section-sub { font-size:12px; color:var(--text-muted); margin-bottom:16px; }
+    .info-row { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed var(--border); font-size:12px; }
+    .info-row:last-child { border-bottom:none; }
+    .info-row span:first-child { color:var(--text-muted); }
+    .info-row span:last-child { color:var(--text-primary); font-weight:500; }
+    .toast-wrap { position:fixed; top:20px; right:20px; z-index:100; display:flex; flex-direction:column; gap:8px; }
+    .toast { padding:10px 14px; border-radius:8px; font-size:12px; font-weight:500; max-width:360px; }
+    .toast-success { background:#065f46; color:#d1fae5; }
+    .toast-error { background:#7f1d1d; color:#fee2e2; }
+    .err-list { margin-top:8px; padding:10px 12px; background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.3); border-radius:8px; color:#fecaca; font-size:12px; }
+    .err-list ul { margin:0; padding-left:18px; }
+  </style>
+</head>
+<body class="antialiased" style="background:var(--bg-page);color:var(--text-primary);min-height:100vh">
+
+  <div class="max-w-3xl mx-auto px-4 py-6">
+    <!-- Header: back link + theme toggle -->
+    <div class="flex items-center justify-between mb-6">
+      <a href="/" class="text-xs flex items-center gap-2" style="color:var(--text-secondary)">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+        Back to dashboard
+      </a>
+      <button @@click="toggleTheme()" class="btn-secondary flex items-center gap-2" title="Toggle theme">
+        <template x-if="isDark"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg></template>
+        <template x-if="!isDark"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></template>
+        <span x-text="isDark ? 'Light Mode' : 'Dark Mode'"></span>
+      </button>
+    </div>
+
+    <!-- Page title -->
+    <div class="mb-5">
+      <h1 class="text-xl font-bold" style="color:var(--text-primary)">Your Profile</h1>
+      <p class="text-xs" style="color:var(--text-muted)">Manage your account details and password. Email is your login username and can't be changed.</p>
+    </div>
+
+    <!-- ACCOUNT DETAILS -->
+    <form class="section-card" @@submit.prevent="saveDetails()">
+      <div class="section-title">Account details</div>
+      <div class="section-sub">Displayed in the app chrome and reports.</div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <div class="field-label">Display name</div>
+          <input type="text" class="field-input" x-model="form.displayName" maxlength="256" placeholder="Your name" />
+        </div>
+        <div>
+          <div class="field-label">Email (username)</div>
+          <input type="email" class="field-input" value="@Model.Me.Email" readonly />
+        </div>
+        <div>
+          <div class="field-label">Phone</div>
+          <input type="tel" class="field-input" x-model="form.phone" placeholder="+1 555 0100" />
+        </div>
+        <div>
+          <div class="field-label">Role</div>
+          <input type="text" class="field-input" value="@Model.EffectiveRole" readonly />
+        </div>
+      </div>
+
+      <template x-if="detailsErrors.length">
+        <div class="err-list"><ul><template x-for="e in detailsErrors"><li x-text="e"></li></template></ul></div>
+      </template>
+
+      <div class="flex items-center gap-2 mt-5">
+        <button type="submit" class="btn-primary" :disabled="detailsSaving">
+          <span x-show="!detailsSaving">Save changes</span>
+          <span x-show="detailsSaving">Saving…</span>
+        </button>
+      </div>
+    </form>
+
+    <!-- SECURITY -->
+    <form class="section-card" @@submit.prevent="changePassword()">
+      <div class="section-title">Change password</div>
+      <div class="section-sub">Password must be at least 8 characters with upper, lower, and a digit.</div>
+
+      <div class="grid grid-cols-1 gap-4" style="max-width:420px">
+        <div>
+          <div class="field-label">Current password</div>
+          <input type="password" class="field-input" x-model="pwd.current" autocomplete="current-password" />
+        </div>
+        <div>
+          <div class="field-label">New password</div>
+          <input type="password" class="field-input" x-model="pwd.next" autocomplete="new-password" />
+        </div>
+        <div>
+          <div class="field-label">Confirm new password</div>
+          <input type="password" class="field-input" x-model="pwd.confirm" autocomplete="new-password" />
+        </div>
+      </div>
+
+      <template x-if="pwdErrors.length">
+        <div class="err-list"><ul><template x-for="e in pwdErrors"><li x-text="e"></li></template></ul></div>
+      </template>
+
+      <div class="flex items-center gap-2 mt-5">
+        <button type="submit" class="btn-primary" :disabled="pwdSaving">
+          <span x-show="!pwdSaving">Change password</span>
+          <span x-show="pwdSaving">Updating…</span>
+        </button>
+      </div>
+    </form>
+
+    <!-- READ-ONLY ACCOUNT INFO -->
+    <div class="section-card">
+      <div class="section-title">Account info</div>
+      <div class="section-sub">Read-only. Visible here for transparency.</div>
+      <div class="info-row"><span>Registered</span><span>@fmt(Model.Me.CreatedAt == default ? (DateTime?)null : Model.Me.CreatedAt)</span></div>
+      <div class="info-row"><span>Last sign-in</span><span>@fmt(Model.Me.LastLoginAt)</span></div>
+      <div class="info-row"><span>Account active</span><span>@(Model.Me.IsActive ? "Yes" : "No")</span></div>
+      @if (!string.IsNullOrEmpty(Model.InviterEmail))
+      {
+        <div class="info-row"><span>Invited by</span><span>@Model.InviterEmail</span></div>
+      }
+      <div class="info-row"><span>User ID</span><span style="font-family:ui-monospace,monospace;font-size:11px">@Model.Me.Id</span></div>
+    </div>
+  </div>
+
+  <!-- Toast stack -->
+  <div class="toast-wrap">
+    <template x-for="t in toasts" :key="t.id">
+      <div class="toast" :class="t.kind === 'error' ? 'toast-error' : 'toast-success'" x-text="t.msg"></div>
+    </template>
+  </div>
+
+<script>
+function profilePage() {
+  return {
+    isDark: (localStorage.getItem('aim.theme') ?? 'dark') === 'dark',
+    form: {
+      displayName: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Me.DisplayName ?? "")),
+      phone: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Me.PhoneNumber ?? "")),
+    },
+    detailsSaving: false,
+    detailsErrors: [],
+    pwd: { current: '', next: '', confirm: '' },
+    pwdSaving: false,
+    pwdErrors: [],
+    toasts: [],
+    toastId: 0,
+    init() {
+      this.$watch('isDark', v => localStorage.setItem('aim.theme', v ? 'dark' : 'light'));
+    },
+    toggleTheme() { this.isDark = !this.isDark; },
+    async saveDetails() {
+      this.detailsErrors = [];
+      this.detailsSaving = true;
+      try {
+        const res = await fetch('/api/profile/details', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ displayName: this.form.displayName, phone: this.form.phone }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          this.detailsErrors = body.errors ?? ['Could not save profile.'];
+          return;
+        }
+        this.toast('Profile saved.', 'success');
+      } catch (e) {
+        this.detailsErrors = ['Network error.'];
+      } finally {
+        this.detailsSaving = false;
+      }
+    },
+    async changePassword() {
+      this.pwdErrors = [];
+      if (!this.pwd.current || !this.pwd.next) {
+        this.pwdErrors = ['Current and new password are required.'];
+        return;
+      }
+      if (this.pwd.next !== this.pwd.confirm) {
+        this.pwdErrors = ['New password and confirmation do not match.'];
+        return;
+      }
+      this.pwdSaving = true;
+      try {
+        const res = await fetch('/api/profile/password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ currentPassword: this.pwd.current, newPassword: this.pwd.next }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          this.pwdErrors = body.errors ?? ['Could not change password.'];
+          return;
+        }
+        this.pwd = { current: '', next: '', confirm: '' };
+        this.toast('Password updated.', 'success');
+      } catch (e) {
+        this.pwdErrors = ['Network error.'];
+      } finally {
+        this.pwdSaving = false;
+      }
+    },
+    toast(msg, kind = 'success') {
+      const id = ++this.toastId;
+      this.toasts.push({ id, msg, kind });
+      setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id); }, 3500);
+    },
+  };
+}
+</script>
+
+</body>
+</html>

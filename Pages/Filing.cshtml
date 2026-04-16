@@ -1,9 +1,17 @@
 @page
+@using AIM.Web.Services
+@using AIM.Web.Models
 @{
     Layout = null;
-    var isAdmin = User.IsInRole("Admin");
-    var isAnalyst = User.IsInRole("Analyst") || isAdmin;
+    var e = EffectiveRoles.Compute(HttpContext);
+    var isSuperAdmin = e.IsSuperAdmin;
+    var isAdmin = e.IsAdmin;
+    var isAnalyst = e.IsAnalyst;
+    var viewAsOverride = e.ViewAsOverride;
     var displayName = User.Identity?.Name ?? "Guest";
+    var primaryRoleLabel = isSuperAdmin
+        ? (viewAsOverride ?? AimRoles.SuperAdmin)
+        : (isAdmin ? AimRoles.Admin : (isAnalyst ? AimRoles.Analyst : AimRoles.Viewer));
     if (!isAnalyst) { Response.Redirect("/"); return; }
 }
 <!DOCTYPE html>
@@ -80,11 +88,18 @@
         <span class="nav-link-text">Filing Queue</span>
       </a>
       }
-      @if (isAdmin)
+      @if (isAnalyst)
       {
       <a href="/Import" class="nav-item mb-1" title="Import">
         <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 16 16" class="flex-shrink-0"><path d="M8 2v8M5 7l3 3 3-3"/><path d="M2 11v2h12v-2"/></svg>
         <span class="nav-link-text">Import</span>
+      </a>
+      }
+      @if (isAdmin)
+      {
+      <a href="/Admin/Users" class="nav-item mb-1" title="Manage Users">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 16 16" class="flex-shrink-0"><path d="M11 14v-1a2.5 2.5 0 0 0-2.5-2.5h-4A2.5 2.5 0 0 0 2 13v1"/><circle cx="6.5" cy="5" r="2.5"/><path d="M14 14v-1a2.5 2.5 0 0 0-1.88-2.42M10.5 2.58a2.5 2.5 0 0 1 0 4.84"/></svg>
+        <span class="nav-link-text">Manage Users</span>
       </a>
       }
     </div>
@@ -97,13 +112,16 @@
         <template x-if="!isDark"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 16 16" class="flex-shrink-0"><path d="M13.5 8.5a5.5 5.5 0 1 1-7-7 7 7 0 0 0 7 7z"/></svg></template>
         <span class="nav-link-text" x-text="isDark ? 'Light Mode' : 'Dark Mode'"></span>
       </button>
-      <div class="flex items-center gap-2 px-3 py-1">
-        <div class="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0" style="background:var(--accent);color:#fff" x-text="('@displayName')[0]?.toUpperCase()"></div>
+      <a href="/Profile" class="flex items-center gap-2 px-3 py-1 rounded-md profile-link" title="Edit your profile">
+        <div class="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+             style="background:@(isSuperAdmin ? "#d97706" : "var(--accent)");color:#fff" x-text="('@displayName')[0]?.toUpperCase()"></div>
         <div class="nav-link-text min-w-0">
           <div class="text-xs truncate" style="color:var(--text-on-dark)" x-text="'@displayName'"></div>
-          <div class="text-[10px]" style="color:var(--text-muted)">@(isAdmin ? "Admin" : (isAnalyst ? "Analyst" : "Viewer"))</div>
+          <div class="text-[10px]" style="color:var(--text-muted)">
+            @primaryRoleLabel@(isSuperAdmin && viewAsOverride != null ? " · view-as" : "")
+          </div>
         </div>
-      </div>
+      </a>
       <a href="/Identity/Account/Logout" class="nav-item mt-1" title="Sign out">
         <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 16 16" class="flex-shrink-0"><path d="M6 14H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h3M11 11l3-3-3-3M6 8h8"/></svg>
         <span class="nav-link-text">Sign out</span>

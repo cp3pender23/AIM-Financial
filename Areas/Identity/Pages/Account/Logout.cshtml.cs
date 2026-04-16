@@ -1,4 +1,5 @@
 using AIM.Web.Models;
+using AIM.Web.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -27,6 +28,11 @@ public class LogoutModel : PageModel
 
     private async Task<IActionResult> SignOutAndRedirect(string? returnUrl)
     {
+        // Clear the SuperAdmin view-as cookie first — otherwise a SuperAdmin
+        // who logged out while viewing as Viewer would come back to a signed
+        // cookie from a previous session and silently see the Viewer UI on
+        // next login.
+        EffectiveRoles.ClearViewAs(HttpContext);
         await _signInManager.SignOutAsync();
         _logger.LogInformation("User logged out.");
         // Always land the user back on the login page; returnUrl is intentionally

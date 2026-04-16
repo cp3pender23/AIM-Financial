@@ -10,11 +10,13 @@ namespace AIM.Web.Areas.Identity.Pages.Account;
 public class LoginModel : PageModel
 {
     private readonly SignInManager<AimUser> _signInManager;
+    private readonly UserManager<AimUser> _userManager;
     private readonly ILogger<LoginModel> _logger;
 
-    public LoginModel(SignInManager<AimUser> signInManager, ILogger<LoginModel> logger)
+    public LoginModel(SignInManager<AimUser> signInManager, UserManager<AimUser> userManager, ILogger<LoginModel> logger)
     {
         _signInManager = signInManager;
+        _userManager = userManager;
         _logger = logger;
     }
 
@@ -56,12 +58,29 @@ public class LoginModel : PageModel
 
         if (!ModelState.IsValid) return Page();
 
+        // Before PasswordSignInAsync, short-circuit disabled accounts so a
+        // legitimate password still yields a friendly error rather than a
+        // full authenticated session that only fails on the next request.
+        var candidate = await _userManager.FindByEmailAsync(Input.Email);
+        if (candidate is { IsActive: false })
+        {
+            _logger.LogWarning("Sign-in refused for disabled account {Email}.", Input.Email);
+            ModelState.AddModelError(string.Empty, "This account has been disabled. Please contact an administrator.");
+            return Page();
+        }
+
         var result = await _signInManager.PasswordSignInAsync(
             Input.Email, Input.Password, Input.RememberMe, lockoutOnFailure: false);
 
         if (result.Succeeded)
         {
             _logger.LogInformation("User logged in.");
+            // Stamp LastLoginAt — shown on /Admin/Users for stale-account detection.
+            if (candidate is not null)
+            {
+                candidate.LastLoginAt = DateTime.UtcNow;
+                await _userManager.UpdateAsync(candidate);
+            }
             return LocalRedirect(returnUrl);
         }
         if (result.RequiresTwoFactor)

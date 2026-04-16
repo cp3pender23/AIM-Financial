@@ -394,3 +394,96 @@ body {
   vertical-align: middle;
   border-radius: 2px;
 }
+
+/* ───────────────────────────────────────────────────────────────── */
+/* Role & access overhaul — profile link, SuperAdmin dropdown,        */
+/* view-as banner, invite modal.                                      */
+/* ───────────────────────────────────────────────────────────────── */
+
+/* Clickable profile area in the sidebar. Rendered as an <a>, so it
+   already has link-reset; add a subtle hover that matches nav-item
+   without fighting the sidebar's dark background. */
+.profile-link {
+  transition: background .12s;
+  text-decoration: none;
+}
+.profile-link:hover {
+  background: var(--sidebar-hover-bg, rgba(255, 255, 255, .06));
+}
+
+/* Items inside the SuperAdmin "view as" dropdown. Two-line layout:
+   role name on top, a short hint underneath. */
+.dropdown-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+.dropdown-item:hover {
+  background: var(--bg-hover);
+}
+.dropdown-item .dropdown-hint {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+/* Banner shown at top of <main> when a SuperAdmin has an active
+   view-as override. Amber strip — matches the SuperAdmin dropdown
+   accent, so a glance tells them "you're in test mode". */
+.view-as-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px;
+  margin-bottom: 16px;
+  border-radius: 8px;
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  color: #78350f;
+  font-size: 12px;
+  font-weight: 500;
+}
+.dark .view-as-banner {
+  background: rgba(217, 119, 6, .12);
+  border-color: rgba(217, 119, 6, .4);
+  color: #fbbf24;
+}
+.view-as-exit {
+  background: #d97706;
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+}
+.view-as-exit:hover {
+  background: #b45309;
+}
+
+/* Role-badge variants used across profile chrome. The base .pill-*
+   classes are defined inline on the Admin/Users page; these are for
+   header chrome on the dashboard & Filing/Import pages. */
+.role-badge-super {
+  background: rgba(217, 119, 6, .15);
+  color: #fbbf24;
+  border: 1px solid rgba(217, 119, 6, .4);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .02em;
+}

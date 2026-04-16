@@ -4,6 +4,7 @@ using AIM.Web.Services;
 using AIM.Web.Services.Export;
 using AIM.Web.Services.FinCen;
 using AIM.Web.Services.Import;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -49,16 +50,23 @@ builder.Services.ConfigureApplicationCookie(o =>
     o.Cookie.SameSite = SameSiteMode.Lax;
 });
 
+builder.Services.AddHttpContextAccessor();
+
+// Policies now delegate to EffectiveRoleHandler which honors the SuperAdmin
+// "view-as" cookie. The minimum-role API endpoints use these policy names
+// unchanged — the behavioral change is that CanImportBulk drops from Admin
+// to Analyst (analysts can now bulk-import) and every check respects view-as.
+builder.Services.AddSingleton<IAuthorizationHandler, EffectiveRoleHandler>();
 builder.Services.AddAuthorization(o =>
 {
-    o.AddPolicy(AimPolicies.CanCreateFiling, p => p.RequireRole(AimRoles.Analyst, AimRoles.Admin));
-    o.AddPolicy(AimPolicies.CanApprove, p => p.RequireRole(AimRoles.Admin));
-    o.AddPolicy(AimPolicies.CanSubmit, p => p.RequireRole(AimRoles.Admin));
-    o.AddPolicy(AimPolicies.CanViewAudit, p => p.RequireRole(AimRoles.Admin));
-    o.AddPolicy(AimPolicies.CanImportBulk, p => p.RequireRole(AimRoles.Admin));
+    o.AddPolicy(AimPolicies.CanCreateFiling, p => p.Requirements.Add(new EffectiveRoleRequirement(AimRoles.Analyst)));
+    o.AddPolicy(AimPolicies.CanApprove, p => p.Requirements.Add(new EffectiveRoleRequirement(AimRoles.Admin)));
+    o.AddPolicy(AimPolicies.CanSubmit, p => p.Requirements.Add(new EffectiveRoleRequirement(AimRoles.Admin)));
+    o.AddPolicy(AimPolicies.CanViewAudit, p => p.Requirements.Add(new EffectiveRoleRequirement(AimRoles.Admin)));
+    // Was Admin-only; Analyst now has access to bulk import per role overhaul.
+    o.AddPolicy(AimPolicies.CanImportBulk, p => p.Requirements.Add(new EffectiveRoleRequirement(AimRoles.Analyst)));
+    o.AddPolicy(AimPolicies.CanManageUsers, p => p.Requirements.Add(new EffectiveRoleRequirement(AimRoles.Admin)));
 });
-
-builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddScoped<IBsaReportService, BsaReportService>();
 builder.Services.AddScoped<IAuditLogger, AuditLogger>();
@@ -150,7 +158,9 @@ api.MapPost("/bsa-reports", async (CreateBsaReportDto dto, HttpContext ctx, IBsa
 api.MapPatch("/bsa-reports/{id:long}", async (long id, UpdateBsaReportDto dto, HttpContext ctx, IBsaReportService svc, CancellationToken ct) =>
 {
     var uid = ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
-    var isAdmin = ctx.User.IsInRole(AimRoles.Admin);
+    // Use effective role so a SuperAdmin viewing as Analyst doesn't get admin
+    // override privileges while testing the Analyst experience.
+    var isAdmin = EffectiveRoles.Compute(ctx).IsAdmin;
     try
     {
         var r = await svc.UpdateDraftAsync(id, dto, uid, isAdmin, ct);
@@ -163,10 +173,14 @@ api.MapPatch("/bsa-reports/{id:long}", async (long id, UpdateBsaReportDto dto, H
 api.MapPost("/bsa-reports/{id:long}/transition", async (long id, TransitionDto dto, HttpContext ctx, IBsaReportService svc, CancellationToken ct) =>
 {
     var uid = ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
-    var roles = ctx.User.Claims
-        .Where(c => c.Type == System.Security.Claims.ClaimTypes.Role)
-        .Select(c => c.Value)
-        .ToList();
+    // Build a synthetic role list from the effective-role snapshot so a
+    // SuperAdmin viewing as Analyst doesn't accidentally get Admin transition
+    // powers. Same SuperAdmin⊇Admin⊇Analyst⊇Viewer hierarchy.
+    var eff = EffectiveRoles.Compute(ctx);
+    var roles = new List<string>();
+    if (eff.IsAdmin) roles.Add(AimRoles.Admin);
+    if (eff.IsAnalyst) roles.Add(AimRoles.Analyst);
+    roles.Add(AimRoles.Viewer);
     try
     {
         var r = await svc.TransitionAsync(id, dto, uid, roles, ct);
@@ -233,10 +247,255 @@ api.MapPost("/bsa-reports/import/commit", async (string uploadId, AimDbContext d
     return Results.Ok(new { batchId, inserted = rows.Count });
 }).RequireAuthorization(AimPolicies.CanImportBulk);
 
+// ─────────────────────────────────────────────────────────────────────
+// Profile self-service (any authenticated user).
+// ─────────────────────────────────────────────────────────────────────
+
+api.MapPost("/profile/details", async (UpdateProfileDto dto, HttpContext ctx, UserManager<AimUser> userMgr, SignInManager<AimUser> signInMgr) =>
+{
+    var user = await userMgr.GetUserAsync(ctx.User);
+    if (user is null) return Results.Unauthorized();
+
+    user.DisplayName = string.IsNullOrWhiteSpace(dto.DisplayName) ? null : dto.DisplayName.Trim();
+    var phoneResult = await userMgr.SetPhoneNumberAsync(user, string.IsNullOrWhiteSpace(dto.Phone) ? null : dto.Phone.Trim());
+    if (!phoneResult.Succeeded)
+        return Results.BadRequest(new { errors = phoneResult.Errors.Select(e => e.Description).ToArray() });
+
+    var update = await userMgr.UpdateAsync(user);
+    if (!update.Succeeded)
+        return Results.BadRequest(new { errors = update.Errors.Select(e => e.Description).ToArray() });
+
+    // Refresh the auth cookie so User.Identity.Name picks up any DisplayName
+    // changes on the very next request without forcing a re-login.
+    await signInMgr.RefreshSignInAsync(user);
+    return Results.Ok(new { ok = true, displayName = user.DisplayName, phone = user.PhoneNumber });
+});
+
+api.MapPost("/profile/password", async (ChangePasswordDto dto, HttpContext ctx, UserManager<AimUser> userMgr, SignInManager<AimUser> signInMgr) =>
+{
+    var user = await userMgr.GetUserAsync(ctx.User);
+    if (user is null) return Results.Unauthorized();
+    if (string.IsNullOrEmpty(dto.CurrentPassword) || string.IsNullOrEmpty(dto.NewPassword))
+        return Results.BadRequest(new { errors = new[] { "Current and new passwords are required." } });
+
+    var result = await userMgr.ChangePasswordAsync(user, dto.CurrentPassword, dto.NewPassword);
+    if (!result.Succeeded)
+        return Results.BadRequest(new { errors = result.Errors.Select(e => e.Description).ToArray() });
+
+    await signInMgr.RefreshSignInAsync(user);
+    return Results.Ok(new { ok = true });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// SuperAdmin "view-as" switcher. These endpoints intentionally read
+// the REAL role claim — a SuperAdmin who is currently "viewing as Viewer"
+// must still be able to flip the cookie off.
+// ─────────────────────────────────────────────────────────────────────
+
+api.MapPost("/view-as", (ViewAsDto dto, HttpContext ctx) =>
+{
+    if (!EffectiveRoles.IsRealSuperAdmin(ctx)) return Results.Forbid();
+    if (string.IsNullOrWhiteSpace(dto.Role))
+    {
+        EffectiveRoles.ClearViewAs(ctx);
+        return Results.Ok(new { viewAs = (string?)null });
+    }
+    try
+    {
+        EffectiveRoles.SetViewAs(ctx, dto.Role);
+        return Results.Ok(new { viewAs = dto.Role });
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+api.MapDelete("/view-as", (HttpContext ctx) =>
+{
+    if (!EffectiveRoles.IsRealSuperAdmin(ctx)) return Results.Forbid();
+    EffectiveRoles.ClearViewAs(ctx);
+    return Results.Ok(new { viewAs = (string?)null });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// Admin user management. All require effective-Admin so a SuperAdmin
+// viewing as Viewer correctly gets 403.
+// ─────────────────────────────────────────────────────────────────────
+
+api.MapGet("/admin/users", async (HttpRequest req, UserManager<AimUser> userMgr, AimDbContext db, CancellationToken ct) =>
+{
+    var search = req.Query["search"].ToString();
+    var roleFilter = req.Query["role"].ToString();
+    var statusFilter = req.Query["status"].ToString();
+
+    var users = await db.Users.AsNoTracking().ToListAsync(ct);
+    if (!string.IsNullOrWhiteSpace(search))
+    {
+        users = users.Where(u =>
+            (u.Email ?? "").Contains(search, StringComparison.OrdinalIgnoreCase) ||
+            (u.DisplayName ?? "").Contains(search, StringComparison.OrdinalIgnoreCase)
+        ).ToList();
+    }
+    if (statusFilter == "active") users = users.Where(u => u.IsActive).ToList();
+    else if (statusFilter == "disabled") users = users.Where(u => !u.IsActive).ToList();
+
+    // Identity's role store is per-user via userMgr.GetRolesAsync. For a
+    // fleet this small (<1k) it's fine to fan out. If this grows, swap to a
+    // single join across AspNetUserRoles + AspNetRoles.
+    var rows = new List<object>();
+    foreach (var u in users)
+    {
+        var roles = await userMgr.GetRolesAsync(u);
+        var primaryRole = roles.Contains(AimRoles.SuperAdmin) ? AimRoles.SuperAdmin
+                        : roles.Contains(AimRoles.Admin) ? AimRoles.Admin
+                        : roles.Contains(AimRoles.Analyst) ? AimRoles.Analyst
+                        : AimRoles.Viewer;
+        if (!string.IsNullOrWhiteSpace(roleFilter) && !string.Equals(primaryRole, roleFilter, StringComparison.OrdinalIgnoreCase))
+            continue;
+        rows.Add(new
+        {
+            id = u.Id,
+            email = u.Email,
+            displayName = u.DisplayName,
+            phone = u.PhoneNumber,
+            role = primaryRole,
+            isActive = u.IsActive,
+            createdAt = u.CreatedAt,
+            lastLoginAt = u.LastLoginAt,
+            invitedByUserId = u.InvitedByUserId,
+        });
+    }
+    return Results.Ok(rows);
+}).RequireAuthorization(AimPolicies.CanManageUsers);
+
+api.MapGet("/admin/users/new-count", async (HttpContext ctx, UserManager<AimUser> userMgr, AimDbContext db, CancellationToken ct) =>
+{
+    // Per-admin badge: count users registered since this admin last viewed the list.
+    var me = await userMgr.GetUserAsync(ctx.User);
+    if (me is null) return Results.Unauthorized();
+    var since = me.LastUserReviewAt;
+    var count = since is null
+        ? await db.Users.CountAsync(u => u.Id != me.Id, ct)
+        : await db.Users.CountAsync(u => u.Id != me.Id && u.CreatedAt > since, ct);
+    return Results.Ok(new { count });
+}).RequireAuthorization(AimPolicies.CanManageUsers);
+
+api.MapPost("/admin/users/invite", async (InviteUserDto dto, HttpContext ctx, UserManager<AimUser> userMgr, IAuditLogger audit, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(dto.Email)) return Results.BadRequest(new { error = "Email required" });
+    if (dto.Role is not (AimRoles.Admin or AimRoles.Analyst or AimRoles.Viewer))
+        return Results.BadRequest(new { error = "Role must be Admin, Analyst, or Viewer" });
+
+    var actor = await userMgr.GetUserAsync(ctx.User);
+    var existing = await userMgr.FindByEmailAsync(dto.Email);
+    if (existing is not null) return Results.Conflict(new { error = "A user with that email already exists" });
+
+    var tempPassword = GenerateTempPassword();
+    var user = new AimUser
+    {
+        UserName = dto.Email,
+        Email = dto.Email,
+        DisplayName = string.IsNullOrWhiteSpace(dto.DisplayName) ? null : dto.DisplayName.Trim(),
+        EmailConfirmed = true,
+        IsActive = true,
+        CreatedAt = DateTime.UtcNow,
+        InvitedByUserId = actor?.Id,
+    };
+    var create = await userMgr.CreateAsync(user, tempPassword);
+    if (!create.Succeeded)
+        return Results.BadRequest(new { errors = create.Errors.Select(e => e.Description).ToArray() });
+    await userMgr.AddToRoleAsync(user, dto.Role);
+
+    audit.Log(AuditAction.ImportBatch, "AimUser", user.Id, null, new { action = "invite", role = dto.Role, email = dto.Email });
+
+    return Results.Ok(new { ok = true, id = user.Id, tempPassword });
+}).RequireAuthorization(AimPolicies.CanManageUsers);
+
+api.MapPost("/admin/users/{id}/role", async (string id, SetRoleDto dto, UserManager<AimUser> userMgr, IAuditLogger audit) =>
+{
+    if (dto.Role is not (AimRoles.Admin or AimRoles.Analyst or AimRoles.Viewer))
+        return Results.BadRequest(new { error = "Role must be Admin, Analyst, or Viewer" });
+    var user = await userMgr.FindByIdAsync(id);
+    if (user is null) return Results.NotFound();
+
+    // Strip every role except the new one. Prevents accidental role stacking
+    // (e.g. Admin + Analyst + Viewer) which made role-based UI render
+    // ambiguously in earlier iterations.
+    var currentRoles = await userMgr.GetRolesAsync(user);
+    // SuperAdmin is seed-only; this endpoint never touches it. If the user is
+    // a SuperAdmin, refuse — changes to SuperAdmin membership happen in the
+    // database directly.
+    if (currentRoles.Contains(AimRoles.SuperAdmin))
+        return Results.BadRequest(new { error = "SuperAdmin role cannot be changed from this UI" });
+    foreach (var r in currentRoles)
+        await userMgr.RemoveFromRoleAsync(user, r);
+    var add = await userMgr.AddToRoleAsync(user, dto.Role);
+    if (!add.Succeeded) return Results.BadRequest(new { errors = add.Errors.Select(e => e.Description).ToArray() });
+
+    audit.Log(AuditAction.ImportBatch, "AimUser", user.Id, null, new { action = "role-change", newRole = dto.Role });
+    return Results.Ok(new { ok = true });
+}).RequireAuthorization(AimPolicies.CanManageUsers);
+
+api.MapPost("/admin/users/{id}/active", async (string id, SetActiveDto dto, UserManager<AimUser> userMgr, IAuditLogger audit) =>
+{
+    var user = await userMgr.FindByIdAsync(id);
+    if (user is null) return Results.NotFound();
+    user.IsActive = dto.IsActive;
+    var update = await userMgr.UpdateAsync(user);
+    if (!update.Succeeded) return Results.BadRequest(new { errors = update.Errors.Select(e => e.Description).ToArray() });
+    audit.Log(AuditAction.ImportBatch, "AimUser", user.Id, null, new { action = dto.IsActive ? "enable" : "disable" });
+    return Results.Ok(new { ok = true });
+}).RequireAuthorization(AimPolicies.CanManageUsers);
+
+api.MapPost("/admin/users/{id}/reset-password", async (string id, UserManager<AimUser> userMgr, IAuditLogger audit) =>
+{
+    var user = await userMgr.FindByIdAsync(id);
+    if (user is null) return Results.NotFound();
+    var tempPassword = GenerateTempPassword();
+    await userMgr.RemovePasswordAsync(user);
+    var add = await userMgr.AddPasswordAsync(user, tempPassword);
+    if (!add.Succeeded) return Results.BadRequest(new { errors = add.Errors.Select(e => e.Description).ToArray() });
+    audit.Log(AuditAction.ImportBatch, "AimUser", user.Id, null, new { action = "password-reset" });
+    return Results.Ok(new { ok = true, tempPassword });
+}).RequireAuthorization(AimPolicies.CanManageUsers);
+
 app.MapRazorPages();
 app.MapControllers();
 
 app.Run();
+
+// Random temp password matching the Identity policy (≥8 chars, upper+lower+digit).
+// Non-alphanumeric is NOT required by the configured policy, so we don't add
+// symbols — makes copy/paste and spoken sharing slightly easier for admins.
+static string GenerateTempPassword()
+{
+    const string upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+    const string lower = "abcdefghjkmnpqrstuvwxyz";
+    const string digits = "23456789";
+    var rng = System.Security.Cryptography.RandomNumberGenerator.Create();
+    string Pick(string alphabet, int n)
+    {
+        var buf = new char[n];
+        for (int i = 0; i < n; i++)
+        {
+            var b = new byte[1];
+            rng.GetBytes(b);
+            buf[i] = alphabet[b[0] % alphabet.Length];
+        }
+        return new string(buf);
+    }
+    // 12 chars total: 2 uppercase + 5 lowercase + 3 digits + 2 more. Shuffle.
+    var arr = (Pick(upper, 2) + Pick(lower, 5) + Pick(digits, 3) + Pick(upper + lower + digits, 2)).ToCharArray();
+    for (int i = arr.Length - 1; i > 0; i--)
+    {
+        var jb = new byte[4];
+        rng.GetBytes(jb);
+        var j = (int)(BitConverter.ToUInt32(jb, 0) % (uint)(i + 1));
+        (arr[i], arr[j]) = (arr[j], arr[i]);
+    }
+    return new string(arr);
+}
 
 static async Task SeedRolesAndUsersAsync(IServiceProvider sp, IConfiguration cfg)
 {
@@ -247,15 +506,41 @@ static async Task SeedRolesAndUsersAsync(IServiceProvider sp, IConfiguration cfg
         if (!await roleMgr.RoleExistsAsync(role))
             await roleMgr.CreateAsync(new IdentityRole(role));
 
-    async Task EnsureUser(string email, string displayName, string password, string role)
+    async Task EnsureUser(string email, string displayName, string password, string role, bool stripOtherRoles = false)
     {
         var u = await userMgr.FindByEmailAsync(email);
         if (u is null)
         {
-            u = new AimUser { UserName = email, Email = email, DisplayName = displayName, EmailConfirmed = true };
+            u = new AimUser
+            {
+                UserName = email,
+                Email = email,
+                DisplayName = displayName,
+                EmailConfirmed = true,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+            };
             var r = await userMgr.CreateAsync(u, password);
             if (!r.Succeeded) throw new InvalidOperationException("Seed user creation failed: " + string.Join("; ", r.Errors.Select(e => e.Description)));
         }
+        else if (u.CreatedAt == default)
+        {
+            // Backfill for rows that predate the AddUserAuditFields migration.
+            u.CreatedAt = DateTime.UtcNow;
+            u.IsActive = true;
+            await userMgr.UpdateAsync(u);
+        }
+
+        // If we're explicitly promoting a user (e.g. Colin → SuperAdmin) we
+        // want to drop their old role membership so the UI doesn't see them
+        // as belonging to two roles simultaneously.
+        if (stripOtherRoles)
+        {
+            foreach (var existing in await userMgr.GetRolesAsync(u))
+                if (existing != role)
+                    await userMgr.RemoveFromRoleAsync(u, existing);
+        }
+
         if (!await userMgr.IsInRoleAsync(u, role))
             await userMgr.AddToRoleAsync(u, role);
     }
@@ -263,9 +548,12 @@ static async Task SeedRolesAndUsersAsync(IServiceProvider sp, IConfiguration cfg
     await EnsureUser("admin@aim.local", "Seed Admin", "Admin123!Seed", AimRoles.Admin);
     await EnsureUser("analyst@aim.local", "Seed Analyst", "Analyst123!Seed", AimRoles.Analyst);
     await EnsureUser("viewer@aim.local", "Seed Viewer", "Viewer123!Seed", AimRoles.Viewer);
+    await EnsureUser("superadmin@aim.local", "Seed Super Admin", "SuperAdmin123!Seed", AimRoles.SuperAdmin);
 
+    // Colin is promoted to SuperAdmin as part of the role-system overhaul.
+    // stripOtherRoles ensures any previous Viewer membership is removed.
     var colinPassword = cfg["Seed:ColinPassword"] ?? "DemoViewer123!";
-    await EnsureUser("colin@shieldlytics.com", "Colin", colinPassword, AimRoles.Viewer);
+    await EnsureUser("colin@shieldlytics.com", "Colin", colinPassword, AimRoles.SuperAdmin, stripOtherRoles: true);
 }
 
 static async Task SeedBsaReportsIfEmptyAsync(IServiceProvider sp, IWebHostEnvironment env)
@@ -308,3 +596,13 @@ static async Task SeedBsaReportsIfEmptyAsync(IServiceProvider sp, IWebHostEnviro
         await tx.CommitAsync();
     });
 }
+
+// DTOs for the new endpoints. Declared at the end of the file because in
+// C# top-level programs, type declarations must follow all top-level
+// statements (including static local functions).
+public record UpdateProfileDto(string? DisplayName, string? Phone);
+public record ChangePasswordDto(string CurrentPassword, string NewPassword);
+public record ViewAsDto(string? Role);
+public record InviteUserDto(string Email, string? DisplayName, string Role);
+public record SetRoleDto(string Role);
+public record SetActiveDto(bool IsActive);

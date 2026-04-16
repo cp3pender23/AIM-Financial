@@ -1,0 +1,371 @@
+@page
+@model AIM.Web.Pages.Admin.UsersModel
+@{
+    Layout = null;
+    var displayName = Model.DisplayName;
+}
+<!DOCTYPE html>
+<html lang="en" x-data="adminUsers()" x-init="init()" :class="{ dark: isDark }">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Manage Users — AIM</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { darkMode: 'class', theme: { extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] } } } }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/theme.css">
+
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.9/dist/cdn.min.js"></script>
+
+  <style>
+    .u-table { width:100%; border-collapse:separate; border-spacing:0; font-size:12px; }
+    .u-table th { text-align:left; padding:10px 12px; font-size:11px; font-weight:600; letter-spacing:.05em; text-transform:uppercase;
+                  color:var(--text-muted); background:var(--bg-surface); border-bottom:1px solid var(--border); position:sticky; top:0; }
+    .u-table td { padding:10px 12px; border-bottom:1px solid var(--border); color:var(--text-primary); vertical-align:middle; }
+    .u-table tr:hover td { background:var(--bg-hover); }
+    .pill {
+      display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px;
+      font-size:10px; font-weight:600; letter-spacing:.02em; text-transform:uppercase;
+    }
+    .pill-super { background:rgba(217,119,6,.15); color:#fbbf24; border:1px solid rgba(217,119,6,.4); }
+    .pill-admin { background:rgba(59,130,246,.15); color:#60a5fa; border:1px solid rgba(59,130,246,.4); }
+    .pill-analyst { background:rgba(16,185,129,.15); color:#34d399; border:1px solid rgba(16,185,129,.4); }
+    .pill-viewer { background:rgba(148,163,184,.15); color:#94a3b8; border:1px solid rgba(148,163,184,.4); }
+    .pill-active { background:rgba(16,185,129,.15); color:#34d399; border:1px solid rgba(16,185,129,.4); }
+    .pill-disabled { background:rgba(239,68,68,.15); color:#fca5a5; border:1px solid rgba(239,68,68,.4); }
+    .field-input {
+      padding:8px 10px; border-radius:6px; font-size:12px; font-family:inherit;
+      background:var(--bg-input); color:var(--text-primary); border:1px solid var(--border-input);
+    }
+    .field-input:focus { outline:none; border-color:var(--border-focus); }
+    .btn-primary { background:var(--accent); color:#fff; padding:8px 14px; border-radius:6px; font-size:12px; font-weight:600; border:none; cursor:pointer; }
+    .btn-primary:hover { background:var(--accent-hover); }
+    .btn-secondary { background:var(--bg-surface); color:var(--text-secondary); padding:6px 10px; border-radius:6px; font-size:11px; font-weight:500; border:1px solid var(--border); cursor:pointer; }
+    .btn-secondary:hover { background:var(--bg-hover); }
+    .btn-danger { color:#fca5a5; border-color:rgba(239,68,68,.4); }
+    .modal-back {
+      position:fixed; inset:0; background:rgba(0,0,0,.5); backdrop-filter:blur(4px);
+      display:flex; align-items:center; justify-content:center; z-index:60; padding:16px;
+    }
+    .modal {
+      background:var(--bg-surface); border:1px solid var(--border); border-radius:12px;
+      box-shadow:var(--shadow-md); padding:24px; max-width:420px; width:100%;
+    }
+    .toast-wrap { position:fixed; top:20px; right:20px; z-index:100; display:flex; flex-direction:column; gap:8px; }
+    .toast { padding:10px 14px; border-radius:8px; font-size:12px; font-weight:500; max-width:420px; }
+    .toast-success { background:#065f46; color:#d1fae5; }
+    .toast-error { background:#7f1d1d; color:#fee2e2; }
+    .code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; background:var(--bg-input); padding:4px 8px; border-radius:4px; font-size:13px; letter-spacing:.02em; }
+  </style>
+</head>
+<body class="antialiased" style="background:var(--bg-page);color:var(--text-primary);min-height:100vh">
+
+  <div class="max-w-7xl mx-auto px-4 py-6">
+    <!-- Top nav strip: back + theme toggle -->
+    <div class="flex items-center justify-between mb-4">
+      <a href="/" class="text-xs flex items-center gap-2" style="color:var(--text-secondary)">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+        Back to dashboard
+      </a>
+      <div class="flex items-center gap-2">
+        <a href="/Profile" class="btn-secondary">@displayName</a>
+        <a href="/Identity/Account/Logout" class="btn-secondary">Sign out</a>
+      </div>
+    </div>
+
+    <!-- Page header -->
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+      <div>
+        <h1 class="text-xl font-bold" style="color:var(--text-primary)">Manage users</h1>
+        <p class="text-xs" style="color:var(--text-muted)">
+          <span x-text="rows.length"></span> accounts · role, status, and invites live here
+        </p>
+      </div>
+      <button @@click="inviteOpen = true" class="btn-primary">+ Invite user</button>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="flex flex-wrap items-center gap-2 mb-4">
+      <input type="text" class="field-input" x-model="filters.search" @@input="loadUsers()" placeholder="Search email or name" style="min-width:240px" />
+      <select class="field-input" x-model="filters.role" @@change="loadUsers()">
+        <option value="">All roles</option>
+        <option>SuperAdmin</option>
+        <option>Admin</option>
+        <option>Analyst</option>
+        <option>Viewer</option>
+      </select>
+      <select class="field-input" x-model="filters.status" @@change="loadUsers()">
+        <option value="">All statuses</option>
+        <option value="active">Active</option>
+        <option value="disabled">Disabled</option>
+      </select>
+    </div>
+
+    <!-- User table -->
+    <div style="border:1px solid var(--border); border-radius:12px; overflow:hidden; background:var(--bg-page)">
+      <div style="overflow-x:auto; max-height:70vh">
+        <table class="u-table">
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Display name</th>
+              <th>Role</th>
+              <th>Status</th>
+              <th>Registered</th>
+              <th>Last sign-in</th>
+              <th style="text-align:right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="u in visibleRows" :key="u.id">
+              <tr>
+                <td><span x-text="u.email"></span></td>
+                <td>
+                  <span x-text="u.displayName || '—'" style="color:var(--text-secondary)"></span>
+                  <template x-if="u.invitedByUserId"><span class="pill" style="background:rgba(59,130,246,.1);color:#93c5fd;border:1px solid rgba(59,130,246,.3);margin-left:6px">invited</span></template>
+                </td>
+                <td>
+                  <span class="pill"
+                        :class="{'pill-super': u.role==='SuperAdmin', 'pill-admin': u.role==='Admin', 'pill-analyst': u.role==='Analyst', 'pill-viewer': u.role==='Viewer'}"
+                        x-text="u.role"></span>
+                </td>
+                <td>
+                  <span class="pill" :class="u.isActive ? 'pill-active' : 'pill-disabled'" x-text="u.isActive ? 'Active' : 'Disabled'"></span>
+                </td>
+                <td x-text="fmtDate(u.createdAt)"></td>
+                <td x-text="fmtDate(u.lastLoginAt)" style="color:var(--text-muted)"></td>
+                <td style="text-align:right; white-space:nowrap">
+                  <select class="field-input" style="font-size:11px; padding:4px 6px; min-width:110px"
+                          x-model="u._newRole" :disabled="u.role==='SuperAdmin' || u.id==='@Model.CurrentUserId'"
+                          @@change="changeRole(u)">
+                    <option>Viewer</option>
+                    <option>Analyst</option>
+                    <option>Admin</option>
+                    <template x-if="u.role==='SuperAdmin'"><option>SuperAdmin</option></template>
+                  </select>
+                  <button class="btn-secondary" @@click="toggleActive(u)" :disabled="u.id==='@Model.CurrentUserId'"
+                          x-text="u.isActive ? 'Disable' : 'Enable'"></button>
+                  <button class="btn-secondary btn-danger" @@click="resetPassword(u)" :disabled="u.id==='@Model.CurrentUserId'">Reset pwd</button>
+                </td>
+              </tr>
+            </template>
+            <template x-if="!loading && visibleRows.length === 0">
+              <tr><td colspan="7" style="text-align:center; padding:24px; color:var(--text-muted)">No users match those filters.</td></tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Invite modal -->
+    <template x-if="inviteOpen">
+      <div class="modal-back" @@click.self="inviteOpen = false">
+        <div class="modal">
+          <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">Invite a new user</h2>
+          <p class="text-xs mb-4" style="color:var(--text-muted)">We'll generate a one-time password. Share it with them out-of-band — it won't be emailed.</p>
+          <form @@submit.prevent="submitInvite()" class="flex flex-col gap-3">
+            <div>
+              <label class="field-label text-xs" style="color:var(--text-muted)">Email</label>
+              <input type="email" required class="field-input w-full mt-1" x-model="invite.email" placeholder="new.user@example.com" />
+            </div>
+            <div>
+              <label class="field-label text-xs" style="color:var(--text-muted)">Display name (optional)</label>
+              <input type="text" class="field-input w-full mt-1" x-model="invite.displayName" placeholder="New User" />
+            </div>
+            <div>
+              <label class="field-label text-xs" style="color:var(--text-muted)">Role</label>
+              <select class="field-input w-full mt-1" x-model="invite.role">
+                <option>Viewer</option>
+                <option>Analyst</option>
+                <option>Admin</option>
+              </select>
+            </div>
+            <template x-if="inviteErrors.length">
+              <div style="padding:8px 10px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:6px;color:#fca5a5;font-size:12px">
+                <ul style="margin:0;padding-left:18px"><template x-for="e in inviteErrors"><li x-text="e"></li></template></ul>
+              </div>
+            </template>
+            <div class="flex justify-end gap-2 mt-2">
+              <button type="button" class="btn-secondary" @@click="inviteOpen = false">Cancel</button>
+              <button type="submit" class="btn-primary" :disabled="inviting">
+                <span x-show="!inviting">Send invite</span>
+                <span x-show="inviting">Creating…</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </template>
+
+    <!-- Temp-password reveal modal (shared for invite + password reset) -->
+    <template x-if="tempPasswordResult">
+      <div class="modal-back" @@click.self="tempPasswordResult = null">
+        <div class="modal">
+          <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">One-time password</h2>
+          <p class="text-xs mb-3" style="color:var(--text-muted)">
+            For <strong x-text="tempPasswordResult.email"></strong>. Share this now — it's shown once and then disappears.
+          </p>
+          <div class="code" x-text="tempPasswordResult.tempPassword"></div>
+          <div class="flex justify-end gap-2 mt-4">
+            <button class="btn-secondary" @@click="copyTemp()">Copy</button>
+            <button class="btn-primary" @@click="tempPasswordResult = null">Done</button>
+          </div>
+        </div>
+      </div>
+    </template>
+
+  </div>
+
+  <!-- Toast stack -->
+  <div class="toast-wrap">
+    <template x-for="t in toasts" :key="t.id">
+      <div class="toast" :class="t.kind === 'error' ? 'toast-error' : 'toast-success'" x-text="t.msg"></div>
+    </template>
+  </div>
+
+<script>
+function adminUsers() {
+  return {
+    isDark: (localStorage.getItem('aim.theme') ?? 'dark') === 'dark',
+    rows: [],
+    loading: true,
+    filters: { search: '', role: '', status: '' },
+    inviteOpen: false,
+    invite: { email: '', displayName: '', role: 'Viewer' },
+    inviting: false,
+    inviteErrors: [],
+    tempPasswordResult: null,
+    toasts: [],
+    toastId: 0,
+
+    async init() {
+      this.$watch('isDark', v => localStorage.setItem('aim.theme', v ? 'dark' : 'light'));
+      await this.loadUsers();
+    },
+
+    get visibleRows() {
+      // Server does the filtering; this is just a safety net.
+      return this.rows;
+    },
+
+    async loadUsers() {
+      this.loading = true;
+      try {
+        const q = new URLSearchParams();
+        if (this.filters.search) q.set('search', this.filters.search);
+        if (this.filters.role) q.set('role', this.filters.role);
+        if (this.filters.status) q.set('status', this.filters.status);
+        const res = await fetch('/api/admin/users' + (q.toString() ? '?' + q.toString() : ''));
+        if (!res.ok) throw new Error('load failed');
+        this.rows = (await res.json()).map(u => ({ ...u, _newRole: u.role }));
+      } catch (e) {
+        this.toast('Could not load users.', 'error');
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async changeRole(u) {
+      if (u._newRole === u.role) return;
+      const newRole = u._newRole;
+      try {
+        const res = await fetch(`/api/admin/users/${u.id}/role`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role: newRole }),
+        });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'failed');
+        u.role = newRole;
+        this.toast(`Role updated: ${u.email} → ${newRole}`);
+      } catch (e) {
+        u._newRole = u.role; // rollback select
+        this.toast('Role change failed.', 'error');
+      }
+    },
+
+    async toggleActive(u) {
+      const next = !u.isActive;
+      try {
+        const res = await fetch(`/api/admin/users/${u.id}/active`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isActive: next }),
+        });
+        if (!res.ok) throw new Error('failed');
+        u.isActive = next;
+        this.toast(next ? `${u.email} enabled.` : `${u.email} disabled.`);
+      } catch (e) {
+        this.toast('Could not update status.', 'error');
+      }
+    },
+
+    async resetPassword(u) {
+      if (!confirm(`Reset password for ${u.email}? They will need the new password to sign in.`)) return;
+      try {
+        const res = await fetch(`/api/admin/users/${u.id}/reset-password`, { method: 'POST' });
+        if (!res.ok) throw new Error('failed');
+        const body = await res.json();
+        this.tempPasswordResult = { email: u.email, tempPassword: body.tempPassword };
+      } catch (e) {
+        this.toast('Password reset failed.', 'error');
+      }
+    },
+
+    async submitInvite() {
+      this.inviteErrors = [];
+      if (!this.invite.email) { this.inviteErrors = ['Email required.']; return; }
+      this.inviting = true;
+      try {
+        const res = await fetch('/api/admin/users/invite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(this.invite),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          this.inviteErrors = body.errors || [body.error || 'Could not create user.'];
+          return;
+        }
+        this.inviteOpen = false;
+        this.tempPasswordResult = { email: this.invite.email, tempPassword: body.tempPassword };
+        this.invite = { email: '', displayName: '', role: 'Viewer' };
+        await this.loadUsers();
+      } finally {
+        this.inviting = false;
+      }
+    },
+
+    async copyTemp() {
+      try {
+        await navigator.clipboard.writeText(this.tempPasswordResult.tempPassword);
+        this.toast('Password copied to clipboard.');
+      } catch (e) {
+        this.toast('Copy failed.', 'error');
+      }
+    },
+
+    fmtDate(iso) {
+      if (!iso) return '—';
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return '—';
+      if (d.getFullYear() < 1900) return '—'; // pre-migration 0001-01-01 fallback
+      return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    },
+
+    toast(msg, kind = 'success') {
+      const id = ++this.toastId;
+      this.toasts.push({ id, msg, kind });
+      setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id); }, 3500);
+    },
+  };
+}
+</script>
+
+</body>
+</html>
