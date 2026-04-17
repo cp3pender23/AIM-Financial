@@ -75,11 +75,24 @@ public class LoginModel : PageModel
         if (result.Succeeded)
         {
             _logger.LogInformation("User logged in.");
-            // Stamp LastLoginAt — shown on /Admin/Users for stale-account detection.
+            // Stamp LastLoginAt — shown on /Admin/Users for stale-account
+            // detection. We MUST re-fetch the user here: PasswordSignInAsync
+            // internally resets the access-failed-count, which bumps the
+            // ConcurrencyStamp in the DB. If we used the stale `candidate`
+            // reference, UpdateAsync would silently return a ConcurrencyFailure.
             if (candidate is not null)
             {
-                candidate.LastLoginAt = DateTime.UtcNow;
-                await _userManager.UpdateAsync(candidate);
+                var fresh = await _userManager.FindByIdAsync(candidate.Id);
+                if (fresh is not null)
+                {
+                    fresh.LastLoginAt = DateTime.UtcNow;
+                    var updateResult = await _userManager.UpdateAsync(fresh);
+                    if (!updateResult.Succeeded)
+                    {
+                        _logger.LogWarning("Could not stamp LastLoginAt for {Email}: {Errors}",
+                            fresh.Email, string.Join("; ", updateResult.Errors.Select(e => e.Description)));
+                    }
+                }
             }
             return LocalRedirect(returnUrl);
         }

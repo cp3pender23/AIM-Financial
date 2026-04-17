@@ -60,12 +60,19 @@ public class RegisterModel : PageModel
 
         if (!ModelState.IsValid) return Page();
 
+        var now = DateTime.UtcNow;
         var user = new AimUser
         {
             UserName = Input.Email,
             Email = Input.Email,
             DisplayName = Input.DisplayName,
-            EmailConfirmed = true
+            EmailConfirmed = true,
+            IsActive = true,
+            CreatedAt = now,
+            // First sign-in happens below via SignInAsync (not PasswordSignInAsync),
+            // so the Login page's stamping hook never fires. Stamp here so the
+            // /Admin/Users page doesn't show a blank Last sign-in for brand-new users.
+            LastLoginAt = now,
         };
 
         var result = await _userManager.CreateAsync(user, Input.Password);
